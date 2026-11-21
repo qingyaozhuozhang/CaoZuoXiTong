@@ -1,0 +1,25 @@
+SAMPLE mode=baseline round=1 iterations=1000000 total_ns=55950990 ns_per_call=55.951 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=1 iterations=1000000 total_ns=45465564 ns_per_call=45.466 events=0 drops=0 missed=0 stops=0 attach_ms=5.704 insert_ms=0.000 remove_ms=0.000 detach_ms=1.156 status=PASS
+SAMPLE mode=entry round=1 iterations=1000000 total_ns=503810899 ns_per_call=503.811 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.595 insert_ms=0.463 remove_ms=1.418 detach_ms=1.110 status=PASS
+SAMPLE mode=return round=1 iterations=1000000 total_ns=421791352 ns_per_call=421.791 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.775 insert_ms=3.988 remove_ms=1.562 detach_ms=1.099 status=PASS
+SKIP uprobe: No such file or directory
+SAMPLE mode=inert round=2 iterations=1000000 total_ns=49612920 ns_per_call=49.613 events=0 drops=0 missed=0 stops=0 attach_ms=5.996 insert_ms=0.000 remove_ms=0.000 detach_ms=1.124 status=PASS
+SAMPLE mode=entry round=2 iterations=1000000 total_ns=123738167 ns_per_call=123.738 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.649 insert_ms=0.408 remove_ms=1.135 detach_ms=1.090 status=PASS
+SAMPLE mode=return round=2 iterations=1000000 total_ns=179458631 ns_per_call=179.459 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.599 insert_ms=3.172 remove_ms=1.138 detach_ms=1.092 status=PASS
+SKIP uprobe: No such file or directory
+SAMPLE mode=baseline round=2 iterations=1000000 total_ns=64845991 ns_per_call=64.846 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=entry round=3 iterations=1000000 total_ns=125443913 ns_per_call=125.444 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.880 insert_ms=0.459 remove_ms=1.152 detach_ms=1.098 status=PASS
+SAMPLE mode=return round=3 iterations=1000000 total_ns=160136946 ns_per_call=160.137 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.967 insert_ms=3.336 remove_ms=1.143 detach_ms=1.124 status=PASS
+SKIP uprobe: No such file or directory
+SAMPLE mode=baseline round=3 iterations=1000000 total_ns=48678602 ns_per_call=48.679 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=3 iterations=1000000 total_ns=56745025 ns_per_call=56.745 events=0 drops=0 missed=0 stops=0 attach_ms=5.599 insert_ms=0.000 remove_ms=0.000 detach_ms=1.347 status=PASS
+SAMPLE mode=return round=4 iterations=1000000 total_ns=181064764 ns_per_call=181.065 events=2000000 drops=0 missed=0 stops=0 attach_ms=6.076 insert_ms=3.539 remove_ms=1.166 detach_ms=1.097 status=PASS
+SKIP uprobe: No such file or directory
+SAMPLE mode=baseline round=4 iterations=1000000 total_ns=50856034 ns_per_call=50.856 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=4 iterations=1000000 total_ns=47005776 ns_per_call=47.006 events=0 drops=0 missed=0 stops=0 attach_ms=5.877 insert_ms=0.000 remove_ms=0.000 detach_ms=1.331 status=PASS
+SAMPLE mode=entry round=4 iterations=1000000 total_ns=201726768 ns_per_call=201.727 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.563 insert_ms=0.423 remove_ms=1.147 detach_ms=1.121 status=PASS
+SKIP uprobe: No such file or directory
+SAMPLE mode=baseline round=5 iterations=1000000 total_ns=50481138 ns_per_call=50.481 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=5 iterations=1000000 total_ns=46511797 ns_per_call=46.512 events=0 drops=0 missed=0 stops=0 attach_ms=5.850 insert_ms=0.000 remove_ms=0.000 detach_ms=1.128 status=PASS
+SAMPLE mode=entry round=5 iterations=1000000 total_ns=202999161 ns_per_call=202.999 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.986 insert_ms=0.498 remove_ms=1.131 detach_ms=1.089 status=PASS
+SAMPLE mode=return round=5 iterations=1000000 total_ns=275104561 ns_per_call=275.105 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.761 insert_ms=3.141 remove_ms=1.137 detach_ms=1.102 status=PASS

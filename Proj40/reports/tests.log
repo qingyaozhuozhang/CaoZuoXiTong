@@ -1,0 +1,19 @@
+./test_decode
+decoder PASS
+./test_f123
+[probe] decode fail sym=tiny_target total=0
+[probe] decode fail sym=tiny_target total=0
+[probe] decode fail sym=tiny_target total=0
+F1-F3 flags=1 PASS
+F1-F3 flags=3 PASS
+F1-F3 flags=3 PASS
+ring overflow/recovery PASS
+./test_thread_state
+multithread active leader: PASS
+multithread futex-blocked leader: PASS
+./demo_f123
+F1：已向目标进程 1767 的共享库函数安装用户态跳转探针。
+F2：six 六个整数参数 = [1, 2, 3, 4, 5, 6]
+F3：six 返回值（RAX）= 183，call_id=1
+F3：floating 返回值（XMM0）= 4.00，call_id=2
+F1–F3 演示：PASS

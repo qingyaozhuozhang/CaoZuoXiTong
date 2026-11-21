@@ -15,14 +15,16 @@
 #define LUDP_RING_CAP_DEFAULT (1u << 22)   /* 4M events, power of two */
 #define LUDP_RING_HEADER      256           /* padded header (cache-line sep)   */
 #define LUDP_READY_OFF        256           /* ready-flags array offset         */
-#define LUDP_EVENT_SZ         80
+#define LUDP_EVENT_SZ         128
+#define LUDP_RETURN_SLOTS     4096
+#define LUDP_RETURN_SLOT_SZ   256
 #define LUDP_EXEC_POOL_SIZE   (1u << 20)   /* 1 MiB trampoline arena (lazy) */
 #define LUDP_MAX_CHAIN        64
 
 /* Ring layout:
  *   [0,256)   header (seq / watermark / cap / overflow / mask / events_off)
  *   [256, 256+cap*8)   per-slot ready flags (sequence numbers, bulk-readable)
- *   [events_off, +cap*80)  event payloads (bulk-readable)
+ *   [events_off, +cap*128) event payloads (bulk-readable)
  * seq and the watermark live on separate cache lines so the CAS reservation
  * never ping-pongs with the watermark read; there is no commit spin at all. */
 enum { RO_SEQ = 0, RO_COMMITTED = 64, RO_CAP = 128, RO_OVERFLOW = 136,
@@ -40,6 +42,7 @@ typedef struct {
     int chain_next;         /* index of the next (older) probe at same addr, -1 */
     int chain_prev;         /* index of the previous (newer) probe at same addr, -1 */
     bool enabled;
+    unsigned flags;
     u64 hits;
 } probe_t;
 
@@ -50,6 +53,7 @@ typedef struct {
     int data_off;
     int off_ret, off_ring, off_pid;
     int off_rdfsbase;
+    int off_return_rdfsbase, off_slots, off_flags;
 } tramp_layout_t;
 
 struct ludp_ctx {
@@ -71,6 +75,7 @@ struct ludp_ctx {
     uintptr_t exec_base;    /* injected RWX trampoline pool (near shared libs) */
     uintptr_t exec_next;
     size_t exec_size;
+    uintptr_t return_slots;
 
     /* secondary RWX arena allocated *near* an out-of-range target (e.g. a
      * PIE main-program function ~0x55.. while the primary pool sits ~0x7f..).
@@ -110,7 +115,7 @@ int  wait_stop(pid_t tid, int timeout_ms);
 const tramp_layout_t *tramp_layout(void);
 int  tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
                  uintptr_t ring_addr, uintptr_t ret_addr,
-                 const uint8_t *reloc_bytes, int reloc_len);
+                 const uint8_t *reloc_bytes, int reloc_len, unsigned flags);
 
 /* ---- instruction decoder ---- */
 typedef struct {
@@ -118,6 +123,7 @@ typedef struct {
     int rip_off;    /* offset of RIP-relative disp32, or -1 */
     int rel_off;    /* offset of rel8/rel32 immediate, or -1 */
     int rel_size;   /* 1 or 4 */
+    bool terminates; /* unconditional transfer: do not decode beyond it */
 } x86_insn;
 int  x86_dec_one(const uint8_t *p, int maxlen, x86_insn *out);
 
@@ -131,7 +137,8 @@ int  elf_resolve(pid_t pid, const char *lib, const char *sym, uintptr_t *addr,
 
 /* ---- probes (F6) ---- */
 int  probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
-                        uintptr_t addr, u64 *id_out);
+                        uintptr_t addr, unsigned flags, u64 *id_out);
+int return_slots_init(ludp_ctx *c);
 int  probe_remove_internal(ludp_ctx *c, u64 id);
 int  probe_set_enabled(ludp_ctx *c, u64 id, bool en);
 int  rebuild_addr(ludp_ctx *c, uintptr_t addr);

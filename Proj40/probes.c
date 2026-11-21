@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <limits.h>
+#include <errno.h>
 #include <sys/mman.h>
 #include "ludp_internal.h"
 
@@ -149,12 +150,25 @@ int rebuild_addr(ludp_ctx *c, uintptr_t addr)
 }
 
 int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
-                       uintptr_t addr, u64 *id_out)
+                       uintptr_t addr, unsigned flags, u64 *id_out)
 {
+    if (!c || (flags != LUDP_PROBE_ENTRY && flags != (LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN))) {
+        errno = EINVAL; return -1;
+    }
     if (c->nprobes >= LUDP_MAX_PROBES || addr == 0)
         return -1;
+    bool was_stopped = c->stopped;
     if (quiesce(c) != 0) { fprintf(stderr, "[probe] quiesce fail\n"); return -1; }
 
+    int existing = head_of(c, addr);
+    if (existing >= 0 && ((flags | c->probes[existing].flags) & LUDP_PROBE_RETURN)) {
+        errno = ENOTSUP; if (!was_stopped) resume(c);
+        return -1;
+    }
+    if ((flags & LUDP_PROBE_RETURN) && return_slots_init(c)) {
+        if (!was_stopped) resume(c);
+        return -1;
+    }
     int idx = c->nprobes;
     probe_t *p = &c->probes[idx];
     memset(p, 0, sizeof *p);
@@ -164,6 +178,7 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     snprintf(p->lib, sizeof p->lib, "%s", lib ? lib : "");
     p->addr = addr;
     p->enabled = true;
+    p->flags = flags;
     p->chain_next = -1;
     p->chain_prev = -1;
 
@@ -173,23 +188,24 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         memcpy(p->orig, c->probes[h].orig, sizeof p->orig);
         p->orig_len = c->probes[h].orig_len;
         p->chain_next = h;
-        c->probes[h].chain_prev = idx;
+        /* Link only after all preparation succeeds. */
     } else {
         /* read original instructions until we cover a 5-byte jump */
         uint8_t bytes[32];
         if (mem_read(c, addr, bytes, sizeof bytes) != 0) {
             fprintf(stderr, "[probe] mem_read fail sym=%s\n", sym);
-            resume(c);
+            if (!was_stopped) resume(c);
             return -1;
         }
         int total = 0;
         while (total < 5) {
             x86_insn insn;
             int l = x86_dec_one(bytes + total, (int)sizeof bytes - total, &insn);
-            if (l <= 0 || total + l > (int)sizeof bytes) {
+            if (l <= 0 || total + l > (int)sizeof bytes ||
+                (insn.terminates && total + l < 5)) {
                 /* unsupported instruction at the probe site */
                 fprintf(stderr, "[probe] decode fail sym=%s total=%d\n", sym, total);
-                resume(c);
+                if (!was_stopped) resume(c);
                 return -1;
             }
             total += l;
@@ -202,16 +218,16 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     p->tramp = tramp_alloc(c, addr, tl->total_size);
     if (!p->tramp) {
         fprintf(stderr, "[probe] no reachable exec mem sym=%s\n", sym);
-        resume(c);
+        if (!was_stopped) resume(c);
         return -1; /* no reachable trampoline space */
     }
 
     uint8_t reloc[32];
     memset(reloc, 0x90, sizeof reloc);
     if (tramp_build(c, p->tramp, p->id, c->ring_addr, addr + p->orig_len,
-                    reloc, (int)sizeof reloc) != 0) {
+                    reloc, (int)sizeof reloc, flags) != 0) {
         fprintf(stderr, "[probe] tramp_build fail sym=%s\n", sym);
-        resume(c);
+        if (!was_stopped) resume(c);
         return -1;
     }
     if (c->far_valid && p->tramp >= c->far_base &&
@@ -219,16 +235,25 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         c->far_next = p->tramp + tl->total_size;
     else
         c->exec_next = p->tramp + tl->total_size;
+    if (relocate_orig(p->orig, p->orig_len, addr, p->tramp + tl->reloc_off,
+                      reloc, sizeof reloc) < 0) {
+        p->used = 0; if (!was_stopped) resume(c);
+        return -1;
+    }
+    if (h >= 0) c->probes[h].chain_prev = idx;
     c->nprobes = idx + 1;
 
     if (rebuild_addr(c, addr) != 0) {
         fprintf(stderr, "[probe] rebuild fail sym=%s\n", sym);
-        c->nprobes = idx; /* roll back on failure */
-        resume(c);
+        c->nprobes = idx;
+        p->used = 0;
+        if (h >= 0) { c->probes[h].chain_prev = -1; rebuild_addr(c, addr); }
+        else write_patch(c, addr, 0, p->orig, p->orig_len);
+        if (!was_stopped) resume(c);
         return -1;
     }
 
-    resume(c);
+    if (!was_stopped) resume(c);
     if (id_out)
         *id_out = p->id;
     return 0;
@@ -239,6 +264,7 @@ int probe_remove_internal(ludp_ctx *c, u64 id)
     int i = find_probe(c, id);
     if (i < 0)
         return -1;
+    bool was_stopped = c->stopped;
     if (quiesce(c) != 0)
         return -1;
 
@@ -263,7 +289,7 @@ int probe_remove_internal(ludp_ctx *c, u64 id)
     else
         write_patch(c, addr, 0, p->orig, p->orig_len);
 
-    resume(c);
+    if (!was_stopped) resume(c);
     return 0;
 }
 
@@ -274,12 +300,13 @@ int probe_set_enabled(ludp_ctx *c, u64 id, bool en)
         return -1;
     if (c->probes[i].enabled == en)
         return 0;
+    bool was_stopped = c->stopped;
     if (quiesce(c) != 0)
         return -1;
 
     c->probes[i].enabled = en;
     int rc = rebuild_addr(c, c->probes[i].addr);
 
-    resume(c);
+    if (!was_stopped) resume(c);
     return rc;
 }

@@ -1,0 +1,11 @@
+# 本项目生成的目标文件、共享库、可执行程序及 Python 缓存
+*.o
+*.a
+*.so
+__pycache__/
+/test_decode
+/test_f123
+/test_thread_state
+/demo_f123
+/bench_f123
+/.ludp_tuning.env

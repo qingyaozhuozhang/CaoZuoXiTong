@@ -1,212 +1,295 @@
-# LUDP —— 轻量级用户态动态探针（F6 / F7 模块）
+# LUDP：轻量级用户态动态探针（F1–F3、F6–F7）
 
-本模块实现赛题《轻量级用户态动态探针（Lightweight Dynamic probe for User Space）》中的
-**F6（同一进程 ≥16 个并发探针共存）** 与 **F7（多线程安全，不崩溃、不死锁）** 两个必选功能，
-并向上支撑 F1–F5 的基础能力（入口跳转、参数采集、return probe、探针清理/开关）。
+> 功能范围：F1 入口探针、F2 六参数、F3 返回值，以及已有的 F6 多探针共存、F7 多线程协调与稳定运行能力。系统架构为 Linux x86-64，遵循 System V AMD64 ABI。
 
-技术路线：借助 `ptrace` 修改目标进程内存，在函数入口写一条 `jmp rel32` 跳入目标进程内已注入的
-**位置无关、可重入的 trampoline**，在用户态直接记录事件后跳回原函数。全程**不陷入内核**，
-单次探针开销 **~110–125 ns**，远低于赛题 `< 1000 ns` 阈值，也低于内核 uprobe 的 1500–3000 ns。
+## 1. 功能完成情况
 
----
+| 目标 | 实现方式 | 验证方式 |
+|---|---|---|
+| F1：动态库函数入口探针 | `ptrace` 停止/注入，函数入口改写为 `jmp rel32`，执行用户态 trampoline | 真实共享库符号、原字节恢复、拒绝过短或不支持的指令 |
+| F2：读取前六个整数/指针参数 | 从 trampoline 保存的 `RDI、RSI、RDX、RCX、R8、R9` 取得原始参数 | 六个互不相同的 64 位实参、高位数据、负整数、指针 |
+| F3：获取返回值 | 临时替换当前调用的栈返回地址，返回时进入独立用户态 stub | `RAX/RDX/XMM0`、递归、栈参数、入口/返回配对 |
+| F6：同一进程至少 16 个并发探针 | 独立探针 ID/注册表、不同地址共存、同地址入口探针链 | 此前版本完成 30 探针共存压力验证；当前 `test_f123` 覆盖 9 个目标，精简测试集不含独立 ≥16 探针验收 |
+| F7：多线程安全 | 全线程暂停协调、线程状态一致性、clone/退出处理、可重入 trampoline 与多生产者事件缓冲 | 四线程调用、信号处理器重入、已有线程附加、主线程在 `pthread_join`/futex 中阻塞、线程退出回收 |
 
-## 1. 核心设计（也是本模块的“突出点”）
+F6–F7 已有实现是当前探针运行的基础组成部分，并非只有兼容接口。下文分别说明已实现机制、验证证据及尚未覆盖的极端交错。F4 的完整远程映射回收尚未完成；F5 保留 enable/disable 接口，本说明不单独宣称其全部验收条件已满足。
 
-### 1.1 无提交自旋的 ready-flag 环形缓冲（F7 可扩展性的关键）
+## 2. 工作原理
 
-早期实现采用 `CAS 预留序号 → 写事件 → 自旋等 committed == 序号 → committed++` 的严格 FIFO 提交协议。
-该协议在 2 vCPU 上跑 8 线程时发生**锁护送（convoy）**：任一线程被抢占，其后面所有线程都在提交自旋里空转，
-实测 8 线程事件吞吐从 2 线程的 ~1900 万次暴跌到 ~7.6 万次，worker 严重饥饿。
+### F1：入口跳转
 
-重构后改为 **per-slot ready 标志** 协议：
-
-- 生产者：`lock cmpxchg` 预留全局 `seq`（唯一串行点）→ 写入事件 → `xchg` 发布 `ready[idx]=i+1`。
-- **生产者之间互不等待**：发布是各自独立的原子写，全屏障保证事件字段先于 ready 标志可见。
-- 消费者（tracer）：批量读 ready 标志 → 找“连续已发布前缀” → 批量读事件 → 回写消费者水位。
-
-环形缓冲布局（256 字节头 + ready 数组 + 事件数组）：
-
+```text
+原始调用者  call 目标函数
+                  │
+                  ▼
+   目标函数地址 ── jmp rel32 ──────► 入口 trampoline（用户态）
+                                       │ 1. 保存寄存器/标志位
+                                       │ 2. 采集参数并写事件
+                                       │ 3. 恢复寄存器/标志位
+                                       ▼
+                               执行重定位的原入口指令
+                                       │
+                                       └──────► 目标函数地址 + 覆盖长度
+                                                       │
+                                                       ▼
+                                                  正常执行函数
 ```
-[0,256)     header   seq / 消费者水位 / cap / overflow / mask / events_off
-[256, 256+cap*8)     ready 标志（每槽 8 字节，存逻辑序号+1）
-[events_off, +cap*80) 事件负载（每事件 80 字节）
+
+- 安装时才调用 `ptrace`/远程内存操作；每次命中不执行 `int3`、`syscall` 或 `ptrace`。
+- 只在可用 5 字节相对跳转的地址安装，完整解码被覆盖指令；重定位 RIP 相对寻址及可支持的相对分支，遇到不支持的指令拒绝安装。
+- ELF 符号定位支持 ASLR/PIE 环境的已加载对象，不能把 IFUNC 解析器直接当作最终函数入口。
+
+### F2：六参数
+
+```text
+函数原型（示例）：uint64_t work(uint64_t a, b, c, d, e, f)
+
+参数位置： RDI    RSI    RDX    RCX    R8     R9
+事件字段： args[0] ... args[5]
 ```
 
-### 1.2 溢出恢复（优雅降级，绝不卡死）
+这里的“前六个参数”专指 **INTEGER 类寄存器参数**。浮点参数走 `XMM0–XMM7` 等寄存器，混合参数、结构体及隐藏返回指针需要依据函数的真实 ABI 分类解释，不能直接把 `args[0..5]` 当成所有函数前六个形参。事件不自动解引用指针。
 
-当消费者落后超过一个 ring 容量、槽位被覆盖时，ready 标志会变成“未来”序号。旧实现会误判为
-“未发布”而**永久停摆**。本实现检测到 `ready > expected` 即识别为越圈覆盖，直接跳到最新序号继续消费，
-因此**即使极端过载也只会丢事件、不会死锁或崩溃**。生产者侧用 `lock incq` 累计溢出计数作为量化指标。
+### F3：返回事件
 
-### 1.3 同地址链式多探针（F6 的“16+”亮点）
+```text
+正常调用栈返回地址  ──替换──► 唯一 return stub
+                                  │ 读取原始 RAX/RDX/XMM0
+                                  │ 输出 RETURN 事件
+                                  │ 释放调用记录
+                                  ▼
+                           跳回原始调用者
+```
 
-同一函数地址可叠加多个探针：后加入的探针把 trampoline 挂在链头，并把自己的 trampoline 地址写入
-前一个探针的重定位槽，形成**探针链**。移除/开关任一探针时只重建受影响的一段链，其余探针零打扰。
-demo 中 `getpid` 上链了第 2 个探针，两探针命中数完全相等，证明链式共存正确。
+- 调用记录预先分配（4096 槽），入口和返回事件通过 `call_id` 关联；递归和多线程正常返回均有测试。
+- 返回值是寄存器原始值：`retval = RAX`，`retval_hi = RDX`，`xmm0[16]` 是 `XMM0` 原始数据。调用者负责结合函数签名解析类型；不支持完整的复杂聚合类型自动还原。
+- 返回记录耗尽时正常执行原函数，但该次调用没有返回事件，计入 `ludp_return_missed()`；事件环形缓冲满时丢弃新事件，计入 `ludp_overflow()`，绝不悄悄覆盖旧事件。
+- **不支持**被探测栈帧的 `longjmp`、C++ 异常展开、线程取消、协程换栈、`noreturn` 函数或 CET shadow stack；这些路径可能留下无法安全回收的在途返回记录。
 
-### 1.4 结构变更在 quiesce 下进行（F7 正确性）
+### F6：多探针共存
 
-所有“改写指令/重建链”的敏感操作都在 **quiesce**（对全部线程 `PTRACE_INTERRUPT` 并确认停止）下进行，
-避免“某线程正在执行被改写指令”的窗口。quiesce 使用**待确认 tid 列表**方案，天然兼容线程中途退出与新增。
+`probes.c` 使用统一注册表管理同一进程内的探针。每个探针保存自己的 ID、符号/库名、目标地址、原始指令、trampoline 地址和启用状态；事件携带 `probe_id`，消费者可以按探针分别统计。`ludp_probe_count()` 返回当前有效探针数，`ludp_probe_list()` 提供详细信息及已消费入口事件的 `hits`。
 
-### 1.5 运行期动态线程处理（F7 动态 clone）
+- **不同函数地址**：分别安装入口跳转和 trampoline，事件写入同一进程的共享 ring。
+- **同一函数地址**：仅入口模式支持链式叠加。入口跳到最新启用的探针，依次经过较早的探针；只有链尾执行一次原始指令，然后继续目标函数。增删或切换状态时，`rebuild_addr()` 重建该地址的启用链。
+- **返回探针限制**：一个地址存在返回探针，或者新添加的是返回探针时，拒绝该地址的叠加；不同地址的入口+返回探针可以共存。
+- **容量**：注册表有 256 项，单地址链重建数组为 64 项。调用方不得超过单地址链容量；当前注册表按追加方式分配，移除后不会复用槽位，因此 256 是单次 attach 生命周期中的分配上限，不是可以无限插拔的承诺。
 
-目标进程在 GO 之后 `pthread_create` 新线程时，新线程会停在 `PTRACE_EVENT_CLONE` 初始停止点。运行期
-`ludp_poll()` 周期性 `waitpid` 处理 clone/exit/信号：clone 时取子 tid 并 CONTINUE，exit 时剔除，信号原样转发。
-**调用方只需在运行循环里周期性调用 `ludp_poll()`**，动态创建的线程即可正常参与探针与退出。
+同地址两个入口探针的执行顺序为：
 
----
+```text
+目标函数入口 → 新探针 trampoline → 旧探针 trampoline
+                                     ↓
+                             重定位的原入口指令
+                                     ↓
+                              原函数剩余指令
+```
 
-## 2. 目录结构
+此前版本通过了 **30 个探针共存**（含 getpid 同地址双入口探针）的四线程压力测试；无丢事件的测试轮次中，两条 getpid 探针命中数一致。当前目录已经精简为 F1–F3 演示和线程回归程序，旧 `demo stress`/`target` 不在当前构建中，不能直接用旧命令复现。当前 `make test` 的 9 目标测试证明多地址共存，但不等同于重新完成 ≥16 探针专项验收。
 
-| 文件 | 作用 |
-|------|------|
-| `ludp.h` | 公开 API |
-| `ludp_internal.h` | 内部结构与 ring 常量 |
-| `ludp.c` | attach/detach、线程枚举、quiesce/resume/poll、远程 mmap、内存读写、events_read |
-| `probes.c` | 探针注册表、链式共存、enable/disable、rebuild_addr |
-| `x86dec.c` | x86-64 指令长度/操作数解码器（用于覆盖 ≥5 字节入口） |
-| `elf.c` | /proc/pid/maps + ELF dynsym 符号解析（含 GNU 版本化符号默认版本选择） |
-| `trampoline.S` | 位置无关、可重入的探针 trampoline 模板 |
-| `target.c` | 测试目标进程（stress / bench / ctx / sig / pie 模式） |
-| `demo.c` | 测试 harness（F6/F7 演示、交叉验证、性能基准） |
-| `verify.c` | 官方指标验证套件（context / signal / zero / latency / pie） |
-| `ctxlib.c` → `libctx.so` | 供 `target` 链接的共享库校验函数（`ctx_check` / `sig_check`） |
-| `Makefile` | 构建脚本 |
+### F7：多线程协调与安全运行
 
----
+F7 由安装时的线程协调和命中时的可重入事件路径共同实现：
 
-## 3. 构建
+| 场景 | 已实现处理 |
+|---|---|
+| 附加已有多线程进程 | 枚举 `/proc/<pid>/task`，逐线程 `PTRACE_SEIZE`，维护线程 ID 与附加状态的一一对应 |
+| 修改入口或探针链 | `quiesce()` 发出 `PTRACE_INTERRUPT` 并等待停止；操作后保持调用前的停止/运行状态 |
+| 运行期间创建线程 | `ludp_poll()` 处理 `PTRACE_EVENT_CLONE`，登记新线程并继续运行 |
+| 线程退出 | 处理 wait 退出事件和 `/proc` 刷新，以真实线程 ID 删除记录，避免旧状态残留 |
+| 主线程阻塞在 futex | 远程系统调用优先选用其他停在用户态的安全线程；无可用线程时返回错误，避免破坏 syscall restart 现场 |
+| 多线程同时命中 | 寄存器保存使用各自线程的栈；返回调用记录原子领取；ring 使用 CAS 分配独立事件槽 |
+| 信号处理器重入 | 不依赖全局互斥锁，也不等待其他生产者提交；正常信号重入已有测试 |
+| 消费者来不及读取 | ring 满时丢弃新事件并计数，不覆盖仍在使用的槽；消费推进水位后继续记录 |
+
+ring 采用“预留序号 → 写事件 → 发布该槽 ready → 消费者推进水位”的协议。生产者不必等待较早序号的生产者完成，避免线程被抢占或信号重入时出现提交等待死锁。消费者只读取连续已发布的事件；`ludp_overflow()` 用于识别过载导致的数据缺失。
+
+使用时应由**单个 tracer 控制线程**定期调用 `ludp_poll()` 和 `ludp_events_read()`。目标可多线程生产事件，但这不代表同一 `ludp_ctx` 的控制 API 可以被多个 tracer 线程并发调用。事件的 `tid` 是 TLS 基址标识；不支持 FSGSBASE 时为 0，不能将它作为始终可用的内核线程号。
+
+这些机制和测试覆盖了稳定运行、已有线程附加、动态创建线程及正常信号重入。全线程暂停本身并不能保证任意时刻都能安全改写指令：线程 RIP 可能落在待覆盖指令中间，或仍在执行要重建的 trampoline。因此安装/重建/移除仍需应用协调的安全点，不能把 F7 的已验证结果扩展为任意并发热插拔保证。
+
+## 3. 构建和测试
+
+环境：Linux x86-64、gcc、GNU make、glibc、Python 3.9+。运行环境必须允许 tracer 对它自己启动的子进程使用 `ptrace`。
 
 ```bash
-cd ludp
-make            # 生成 libludp.a、libctx.so、target、demo、verify
+cd Proj40
+make -j4            # 构建核心库、测试与性能程序
+make test           # 验证解码、ABI、F1–F3、多地址共存与 F7 线程/futex 场景
+./demo_f123         # 逐条展示六参数及 RAX / XMM0 返回值（中文）
+python3 evaluate.py --rounds 5 --iterations 1000000 --output reports
 ```
 
-依赖：Linux x86_64、gcc、glibc。CPU 需支持 `fsgsbase`（用于 `rdfsbase` 取线程 ID，
-不支持时自动退化为 `rdtsc` + 0 线程 ID，不影响正确性）。
+`make test` 覆盖：
 
----
+1. `test_decode`：RIP 相对/绝对寻址、短跳转重定位、特殊前缀、截断指令拒绝。
+2. `test_f123`：9 个真实函数、前六个整数参数、指针、负数、双精度/128 位返回、递归、栈第七八参数、signal 重入、GPR/RFLAGS/x87/SSE/red zone 保存及缓冲区满载。
+3. `test_thread_state`：已存在的 4 个工作线程、主动运行/主线程阻塞于 `pthread_join` 两种情况，探针命中、退出事件回收、状态一致性。
+4. `demo_f123`：真实打印 F1 安装结果、F2 六个整数参数、F3 整数及浮点返回值。
 
-## 4. 运行 demo
+打印 `SKIP uprobe` 代表内核 perf/uprobes 基准不可用，并非验证通过。`make test` 过程中对刻意不支持的短函数打印 `decode fail` 是**负向测试的预期输出**。
 
-### 4.1 F7 多线程压测
+按功能单独运行：
 
 ```bash
-./demo stress 8 4      # 8 线程、4 秒
+./test_f123          # F1–F3、多地址共存、运行后创建四线程、signal 重入
+./test_thread_state  # F7：附加已有四线程、futex 阻塞主线程、退出状态回收
 ```
 
-输出示例（节选）：
+现有执行结果见 [reports/tests.log](reports/tests.log)，线程状态修复过程见 [docs/实现与优化记录.md](docs/实现与优化记录.md)。本 README 的补充不代表重新运行了全部压力或性能测试。
 
-```
-已添加探针: 30 (目标: >=16)
-...
-=== F6: 多探针命中统计 ===
-id  symbol     address            hits
-1   getpid     0x7f...           540886
-...
-30  getpid#2   0x7f...           540886      <- 链式双探针命中数完全相等
-...
-=== F7: 多线程安全 ===
-目标进程: 正常退出 (DONE=yes, 线程完成=8/8)
-事件总数: 18407398
-事件涉及的独立线程数: 9
-环形缓冲溢出计数: 0
-```
-
-### 4.2 性能基准
-
-```bash
-./demo bench 200000
-```
-
-输出示例：
-
-| 指标 | 数值 |
-|------|------|
-| 无探针 (baseline) | ~82 ns/次 |
-| 用户态探针 | ~197 ns/次 |
-| 单次探针开销 | ~115 ns/次 |
-| 阈值要求 | < 1000 ns/次 |
-| 结论 | 达标 |
-
----
-
-## 5. 实测数据（2 vCPU 云主机，Ubuntu 22.04，gcc 11.4）
-
-- **30 个探针**（18 libc + 11 libm + 1 个 getpid 链式第二探针）共存，全部命中。
-- `getpid` 链式双探针命中数**逐次完全相等**（同地址多探针正确）。
-- **8 线程 4 秒**：~1800 万事件、8/8 线程正常退出、0 死锁、0 崩溃；worker 迭代数均衡（无饥饿）。
-- **2 线程 3 秒**：~2000 万事件、0 溢出。
-- **单次探针开销**：~110–125 ns（阈值 1000 ns，达标）。
-- 符号解析（含 `exp`/`hypot` 的 GNU 默认版本）与目标进程 dlsym **逐项交叉验证一致**。
-
-> 说明：运行在共享云主机上时，外部负载偶尔会导致微量溢出计数（~0.1% 量级）；这是**优雅降级**——
-> 系统自动跳过已覆盖槽位继续消费，不影响线程完成与进程退出。在独占评审机上应稳定为 0。
-
-### 5.1 官方指标验证套件（`verify`）实测
-
-`verify` 逐项对齐官方评分点，需与 `target` 同目录运行：
-
-| 模式 | 验证内容 | 官方要求 | 实测结果 |
-|---|---|---|---|
-| `verify context 1000000` | 上下文（GPR/标志/浮点）保持 | 带/不带探针结果逐位一致 | 一致，单次开销 ~100 ns ✅ |
-| `verify signal 200000 200` | 信号安全 | 信号不丢、进程正常退出 | 200/200 全部处理、正常退出 ✅ |
-| `verify zero 1000000` | 零桩开销 | 未挂探针函数入口无桩指令 | ~4 ns/次 ✅ |
-| `verify latency 16` | 插拔延迟 | 插入/清理 < 10 ms | 插 1.0ms / 删 1.07ms / detach 1.1ms ✅ |
-| `verify pie 200000` | 主程序（PIE）函数探针 | 可对非动态库函数下探针 | checksum 逐位一致 ✅ |
-
-> 内核 uprobe 基线（官方参考 ~1500–3000 ns）因本开发沙箱无 root/perf、tracefs 只读而无法就地测量，
-> 该项对比留待评审机在同机环境下补测；本模块 100–125 ns 的开销对应约 12–24× 的参考加速比。
-
----
-
-## 6. 公开 API 速览（`ludp.h`）
+## 4. 最小 C API 示例
 
 ```c
-ludp_ctx *ludp_attach(pid_t pid);                 // 附加并 quiesce 目标进程
-void ludp_detach(ludp_ctx *ctx);                  // 恢复原指令、清理、detach
+#include "ludp.h"
 
-int ludp_probe_add(ludp_ctx*, const char *lib, const char *sym, u64 *id);
-int ludp_probe_add_addr(ludp_ctx*, const char *sym, uintptr_t addr, u64 *id);
-int ludp_probe_remove(ludp_ctx*, u64 id);
-int ludp_probe_enable(ludp_ctx*, u64 id);
-int ludp_probe_disable(ludp_ctx*, u64 id);
+ludp_ctx *ctx = ludp_attach(pid);  /* 目标进程此时已暂停 */
+u64 id = 0;
+if (!ctx) return;
 
-int ludp_events_read(ludp_ctx*, ludp_event *out, int max, int *n);  // 非阻塞 drain
-u64 ludp_overflow(ludp_ctx*);                      // 累计溢出计数
+if (ludp_probe_add_ex(ctx, "libc.so.6", "getpid",
+                      LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, &id) != 0) {
+    ludp_detach(ctx);
+    return;
+}
+ludp_resume(ctx);
 
-int ludp_quiesce(ludp_ctx*);                       // 停止全部线程
-int ludp_resume(ludp_ctx*);                        // 恢复全部线程
-int ludp_poll(ludp_ctx*);                          // 运行期处理 clone/exit/信号（F7 关键）
+/* 在目标进程执行期间，单个控制线程定期处理 ptrace 停止。 */
+ludp_poll(ctx);
 
-int ludp_mem_read(ludp_ctx*, uintptr_t, void*, size_t);
-int ludp_mem_write(ludp_ctx*, uintptr_t, const void*, size_t);
+ludp_event events[256];
+int n = 0;
+if (ludp_events_read(ctx, events, 256, &n) == 0) {
+    for (int i = 0; i < n; ++i) {
+        if (events[i].type == LUDP_EVENT_RETURN) {
+            /* events[i].retval 为 RAX 的原始值 */
+        }
+    }
+}
+/* 真正卸载应在应用已协调的安全点；F4 尚未完整实现。 */
+ludp_probe_remove(ctx, id);
+ludp_detach(ctx);
 ```
 
----
+入口模式用 `ludp_probe_add()`；入口+返回模式用 `ludp_probe_add_ex()`。事件结构是 128 字节，更新库后必须重新编译调用方。`tsc` 单位是 CPU 周期，不是 CLOCK_MONOTONIC 纳秒；`tid` 是 TLS 基址标识，不是 Linux 内核 TID。
 
-## 7. 设计细节索引（便于答辩追问）
+### F6：批量注册 16 个不同地址的入口探针
 
-- **指令覆盖**：入口 `jmp rel32` 需要 5 字节；不足 5 字节时用自写 x86-64 解码器跨指令取整条边界。
-- **重定位**：被覆盖的原指令统一搬到 trampoline 内的 32 字节槽（`memset 0x90` 后填入），
-  执行完跳回 `probe_addr + orig_len`。对 `getpid` 这类 `endbr64; mov eax,0x27; syscall; ret`
-  纯寄存器/立即数指令可直接搬移。
-- **参数采集**：按 SysV ABI 在入口处从保存的栈帧回读 `rdi/rsi/rdx/rcx/r8/r9`（前 6 个参数）。
-- **return probe**：`ret_addr` 字段记录返回地址；进阶需求可在此基础上加返回点 hook。
-- **内存读写**：优先 `/proc/pid/mem` 的 `pread/pwrite`（运行中也可读），只读 text 尾部用
-  `PTRACE_PEEKDATA/POKEDATA` 读-改-写兜底。
-- **远程 mmap**：在 syscall-entry 停止点用 vDSO 定位 `syscall` 指令，改 RIP 实现远程 `mmap` 注入 ring 与 trampoline 池。
-- **主程序（PIE）函数探针 / rel32 可达性**：入口 `jmp rel32` 只能达 ±2GB；主程序（PIE）常在 `0x55..`，
-  而主 trampoline 池在 `0x7f..`（紧邻共享库）。当目标超出主池可达范围时，按 `/proc/pid/maps` 找空闲间隙、
-  用 `MAP_FIXED_NOREPLACE` 就近 mmap 一个次级 RWX arena（`remote_mmap_near`），仍以 5 字节补丁跳入。
-  动态库探针继续走主池，零额外成本；主程序/动态库两类目标因此都可探。
+下面的辅助函数用于目标已附加且停在应用安全点的场景；要求目标已加载 `libc.so.6`，这些符号都能解析和安全重定位。每次注册必须检查返回值，不能把部分成功当作 ≥16 探针成功。
 
----
+```c
+#include "ludp.h"
 
-## 8. 已避开的坑
+int add_16_entry_probes(ludp_ctx *ctx, u64 ids[16])
+{
+    const char *symbols[16] = {
+        "getpid", "getppid", "getuid", "geteuid",
+        "getgid", "getegid", "gettid", "malloc",
+        "free", "calloc", "realloc", "rand",
+        "srand", "qsort", "getenv", "atoi"
+    };
+    for (int i = 0; i < 16; ++i) {
+        if (ludp_probe_add(ctx, "libc.so.6", symbols[i], &ids[i]) != 0) {
+            /* 由调用方在安全点统一处理已添加的探针或 detach。 */
+            return -1;
+        }
+    }
+    return 0;
+}
+```
 
-- libc/libm 的 **IFUNC**（`gettimeofday time strlen strcmp memcpy memset sin cos tan ceil floor atan` 等）
-  静态 `st_value` 是解析器而非真实入口，已判定为不可安全探针目标并跳过。
-- **GNU 版本化符号**：`exp`/`hypot` 在 dynsym 中有多个同名项，须选**默认版本（`@@`，无 hidden 位）**
-  才能与 dlsym 一致，否则探针挂在旧实现上 0 命中。
+全部安装成功后调用 `ludp_resume()`，在控制循环中处理 `ludp_poll()` 并读取事件，按 `probe_id` 计数。**注册成功不等于命中验证**：F6 验收还应让目标实际调用每个函数，核对所有 16 个 ID 均出现事件，同时检查溢出计数和线程退出状态。
+
+### 控制与观测接口
+
+| 接口 | 用途 |
+|---|---|
+| `ludp_probe_count` / `ludp_probe_list` | 查询有效探针及其地址、状态、已消费的入口命中数 |
+| `ludp_probe_enable` / `ludp_probe_disable` | 切换已有探针状态；同地址入口链会重建 |
+| `ludp_quiesce` / `ludp_resume` | 暂停/恢复已跟踪线程；不替代应用自身的安全点协议 |
+| `ludp_thread_count` | 查询 tracer 当前维护的线程数 |
+| `ludp_poll` | 处理 clone、退出及常规信号停止，维持线程运行 |
+| `ludp_events_read` | 单消费者批量读取事件，推进 ring 消费水位 |
+| `ludp_overflow` / `ludp_return_missed` | 观察事件缓冲过载、返回记录不足造成的缺失 |
+
+## 5. 自动评测、对照、调优
+
+### 正确性与性能一键评测
+
+```bash
+python3 evaluate.py --rounds 5 --iterations 1000000 --output reports
+```
+
+脚本依次构建、运行全部测试、执行基准、检查阈值并生成 `reports/benchmark.md`、`reports/benchmark.json`、`reports/tests.log`。任意测试失败、数据错误或性能超阈值，返回非零退出码。
+
+比较两个版本：
+
+```bash
+python3 evaluate.py --rounds 5 --baseline-json reports/优化前基准.json --output reports
+```
+
+会生成 `reports/对照分析.md`；“优化前”原始数据仅供本次对照，其他 CPU 需重新实测。
+
+### 自动选择大块跨进程内存复制方式
+
+```bash
+python3 auto_tune.py --rounds 5 --iterations 1000000 --output reports
+# 如需将本机建议写成可加载的环境变量文件：
+python3 auto_tune.py --rounds 5 --apply
+source .ludp_tuning.env
+```
+
+`auto_tune.py` 自动比较两条 tracer 侧数据通路：`LUDP_BULK_IO=1`（优先 `process_vm_{readv,writev}`，失败回退）与 `LUDP_BULK_IO=0`（原 `/proc/<pid>/mem` 路径），只从正确性和阈值都通过的候选中选取插入延迟更优者；差异很小时优先默认配置。**调优不会修改目标程序汇编热路径，也不会盲目改写源码。**
+
+## 6. 指标及测量边界
+
+| 指标 | 如何衡量 | 判断方式 |
+|---|---|---|
+| 单次探针开销 | 百万次 `getpid`，用户态入口与入口+返回相对同轮 baseline 的纳秒差 | 两者均 `< 1000ns` |
+| 插入/移除延迟 | tracer 已附加且已到安全点后，测补丁安装与原指令恢复耗时 | 每次 `< 10ms` |
+| 无探针时的额外触发成本 | baseline（完全未附加）与 inert（只附加、未修改入口） | 仅作实验对照，差值受调度噪声影响 |
+| ABI 正确性 | 参数、返回值、通用/浮点上下文、red zone 等独立用例 | 全部通过 |
+| F6 多探针共存 | 同一进程注册并触发 ≥16 个探针，按 ID 核对命中；同地址入口链检查重复采集 | 此前 30 探针压力验证已完成；当前精简测试不含这一规模的专项复测 |
+| F7 多线程运行 | 四线程并发、clone、已有线程附加、futex 阻塞主线程及退出回收 | 用例中参数/返回值正确、事件数量符合预期、线程正常完成且无死锁 |
+| 内核 uprobe 对照 | `perf_event_open` 创建的真实 uprobe | 权限/设备缺失则报告 SKIP |
+
+基准在被测子进程中使用 `CLOCK_MONOTONIC` 测量一百万次调用，运行后再由 tracer 消费事件；入口模式采集一百万条，入口+返回模式采集两百万条。默认事件环的逻辑容量为 4194304（约 544 MiB 虚拟映射，物理页按需分配），实际物理占用与触达事件数相关。普通监控可以自行缩小容量：
+
+```bash
+LUDP_RING_CAP=65536 ./demo_f123
+```
+
+`LUDP_RING_CAP` 必须为 16 到 4194304 之间的 2 的幂；65536 槽约占用 8.5 MiB 虚拟映射。使用小环时必须**及时消费事件**，否则会显式产生丢失计数；百万次 `getpid` 严格基准不应减小默认环，否则事件可能溢出。
+
+**插入延迟并不包含最初 attach 的耗时**，也不等同于完整 F4 无泄漏卸载；“无探针时零开销”指未安装补丁时不会增加函数入口执行路径，不能把有 ptrace 附加的 inert 绝对测量值解释成严格 0 ns。
+
+## 7. 当前尚未覆盖的边界
+
+- 只支持 x86-64；不支持 ARM64。
+- 在主线程处于被中断的阻塞系统调用时，远程系统调用优先选用其他安全停在用户态的线程；如果找不到安全线程，返回错误，不强行覆盖其寄存器。进程中的任意并发瞬间仍需更严格验证。
+- 对于 CET、IBT 强制执行、异常展开、全部信号交错、任意时间热插拔和完全映射回收，仍未满足全面验证条件；这些边界不否定上文列出的 F6–F7 已实现能力，也不能被已有测试结果覆盖。
+- 目标进程信号与线程跟踪需要定期调用 `ludp_poll()`；事件消费只支持单消费者。
+- 目前主目标是正常 C ABI 函数的稳定入口与正常返回，并非对所有机器码都能动态重定位。
+
+## 8. 文件说明
+
+| 文件 | 用途 |
+|---|---|
+| `ludp.c`、`ludp.h`、`ludp_internal.h` | 进程控制、内存访问、公共 API、内部数据结构 |
+| `probes.c` | F1 安装、F6 注册表/同地址入口链、探针状态与链重建 |
+| `x86dec.c`、`elf.c`、`trampoline.S` | 指令解码、符号解析、F1–F3 用户态事件路径与可重入写入 |
+| `test_f123.c`、`test_abi.S`、`testlib.c` | F1–F3 集成与 ABI 验证 |
+| `test_thread_state.c`、`test_decode.c` | F7 已有多线程/futex/退出状态及解码回归测试 |
+| `demo_f123.c` | 面向赛题演示的中文 F1–F3 完整实例 |
+| `bench_f123.c`、`benchmark.py` | 标准化性能基准与报告 |
+| `evaluate.py`、`auto_tune.py` | 自动构建、正确性验收、版本对照与性能参数调优 |
+| `reports/` | 本次测试结果和可再生成的报告；无二进制缓存 |
+
+## 9. 主要参考资料
+
+- [Linux Kernel：Uprobe tracer](https://docs.kernel.org/trace/uprobetracer.html)
+- [Linux Kernel：Kprobes / return probes](https://docs.kernel.org/trace/kprobes.html)
+- [ptrace(2) 系统调用手册](https://man7.org/linux/man-pages/man2/ptrace.2.html)
+- [Libcare：运行中用户态代码热补丁](https://github.com/cloudlinux/libcare)
+- [Frida：动态插桩思路](https://frida.re/)
+- [bpftime：用户态可观测性技术](https://eunomia.dev/zh/blogs/bpftime/)

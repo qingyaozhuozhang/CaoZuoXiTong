@@ -16,8 +16,11 @@
 #include <sys/wait.h>
 #include <sys/user.h>
 #include <sys/mman.h>
+#include <sys/uio.h>
 #include <sys/syscall.h>
 #include <signal.h>
+#include <sys/auxv.h>
+#include <asm/hwcap2.h>
 #include "ludp_internal.h"
 
 #define PTRACE_OPTS (PTRACE_O_TRACECLONE | PTRACE_O_EXITKILL)
@@ -29,13 +32,32 @@ extern const char ludp_tramp_data_begin[], ludp_tramp_data_end[];
 extern const char ludp_tramp_reloc_begin[], ludp_tramp_reloc_end[];
 extern const char ludp_tramp_ret_addr[], ludp_tramp_ring_ptr[];
 extern const char ludp_tramp_probe_id[], ludp_tramp_rdfsbase[];
+extern const char ludp_tramp_return_rdfsbase[], ludp_tramp_slots[], ludp_tramp_flags[];
+extern const char ludp_return_stub[], ludp_return_stub_end[];
+_Static_assert(sizeof(ludp_event) == LUDP_EVENT_SZ, "event ABI");
+_Static_assert(offsetof(ludp_event, type) == 80, "event type offset");
+_Static_assert(offsetof(ludp_event, xmm0) == 112, "FP return offset");
 
 /* ============================ memory access ============================ */
+
+static bool bulk_io_enabled(void)
+{
+    const char *mode = getenv("LUDP_BULK_IO");
+    return !mode || strcmp(mode, "0") != 0;
+}
+
 
 int mem_read(ludp_ctx *c, uintptr_t addr, void *buf, size_t len)
 {
     if (len == 0)
         return 0;
+    /* 大块缓冲区优先单次跨进程复制；不可用时仍支持 /proc/pid/mem。 */
+    if (len >= 16384 && bulk_io_enabled()) {
+        struct iovec local = { .iov_base = buf, .iov_len = len };
+        struct iovec remote = { .iov_base = (void *)addr, .iov_len = len };
+        if (process_vm_readv(c->pid, &local, 1, &remote, 1, 0) == (ssize_t)len)
+            return 0;
+    }
     ssize_t r = pread(c->memfd, buf, len, (off_t)addr);
     if (r == (ssize_t)len)
         return 0;
@@ -59,6 +81,13 @@ int mem_write(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len)
 {
     if (len == 0)
         return 0;
+    /* return stub 初始化为 1 MiB 大块写入，减少跨进程内存复制开销。 */
+    if (len >= 16384 && bulk_io_enabled()) {
+        struct iovec local = { .iov_base = (void *)buf, .iov_len = len };
+        struct iovec remote = { .iov_base = (void *)addr, .iov_len = len };
+        if (process_vm_writev(c->pid, &local, 1, &remote, 1, 0) == (ssize_t)len)
+            return 0;
+    }
     ssize_t r = pwrite(c->memfd, buf, len, (off_t)addr);
     if (r == (ssize_t)len)
         return 0;
@@ -120,11 +149,24 @@ static int add_thread(ludp_ctx *c, pid_t tid)
     if (i >= 0)
         return i;
     if (c->nthreads == c->cap_threads) {
+        /* 两个数组必须一起扩容：单独 realloc 后失败会丢失旧指针。 */
         int nc = c->cap_threads ? c->cap_threads * 2 : 32;
-        c->tids = realloc(c->tids, (size_t)nc * sizeof(pid_t));
-        c->seized = realloc(c->seized, (size_t)nc * sizeof(bool));
-        if (!c->tids || !c->seized)
+        pid_t *new_tids = malloc((size_t)nc * sizeof(*new_tids));
+        bool *new_seized = malloc((size_t)nc * sizeof(*new_seized));
+        if (!new_tids || !new_seized) {
+            free(new_tids);
+            free(new_seized);
+            errno = ENOMEM;
             return -1;
+        }
+        if (c->nthreads) {
+            memcpy(new_tids, c->tids, (size_t)c->nthreads * sizeof(*new_tids));
+            memcpy(new_seized, c->seized, (size_t)c->nthreads * sizeof(*new_seized));
+        }
+        free(c->tids);
+        free(c->seized);
+        c->tids = new_tids;
+        c->seized = new_seized;
         c->cap_threads = nc;
     }
     c->tids[c->nthreads] = tid;
@@ -132,10 +174,21 @@ static int add_thread(ludp_ctx *c, pid_t tid)
     return c->nthreads++;
 }
 
-static int cmp_pid(const void *a, const void *b)
+/* 线程号与 ptrace 附加状态构成一个不可拆开的二元组。 */
+static void sort_threads(ludp_ctx *c)
 {
-    pid_t x = *(const pid_t *)a, y = *(const pid_t *)b;
-    return (x > y) - (x < y);
+    for (int i = 1; i < c->nthreads; ++i) {
+        int j = i;
+        while (j > 0 && c->tids[j - 1] > c->tids[j]) {
+            pid_t tid = c->tids[j - 1];
+            c->tids[j - 1] = c->tids[j];
+            c->tids[j] = tid;
+            bool seized = c->seized[j - 1];
+            c->seized[j - 1] = c->seized[j];
+            c->seized[j] = seized;
+            --j;
+        }
+    }
 }
 
 int threads_refresh(ludp_ctx *c)
@@ -166,15 +219,17 @@ int threads_refresh(ludp_ctx *c)
         if (!alive) {
             int st;
             waitpid(c->tids[i], &st, __WALL | WNOHANG);  /* reap zombie */
-            remove_thread(c, i);
+            remove_thread(c, c->tids[i]);
         }
     }
 
     /* Add any threads we have not seen before. */
-    for (int k = 0; k < ncur; k++)
-        add_thread(c, cur[k]);
+    for (int k = 0; k < ncur; k++) {
+        if (add_thread(c, cur[k]) < 0)
+            return -1;
+    }
 
-    qsort(c->tids, (size_t)c->nthreads, sizeof(pid_t), cmp_pid);
+    sort_threads(c);
 
     /* keep the leader (tgid) first so remote syscalls run on it */
     int li = tid_index(c, c->pid);
@@ -185,8 +240,14 @@ int threads_refresh(ludp_ctx *c)
 
     for (int i = 0; i < c->nthreads; i++) {
         if (!c->seized[i]) {
-            if (ptrace(PTRACE_SEIZE, c->tids[i], 0, PTRACE_OPTS) == 0)
+            if (ptrace(PTRACE_SEIZE, c->tids[i], 0, PTRACE_OPTS) == 0) {
                 c->seized[i] = true;
+            } else if (errno == ESRCH) {
+                /* /proc 快照之后线程退出，下一次刷新会移除它。 */
+                continue;
+            } else {
+                return -1;  /* 不得对尚未附加的线程修改代码 */
+            }
         }
     }
     return 0;
@@ -210,7 +271,8 @@ int quiesce(ludp_ctx *c)
 {
     if (c->stopped)
         return 0;
-    threads_refresh(c);
+    if (threads_refresh(c) != 0)
+        return -1;
 
     /* "pending" holds every live tid we are waiting to see stop (or exit).
      * Keeping it index-free avoids the pitfalls of stale array positions when
@@ -381,11 +443,25 @@ static int remote_syscall(ludp_ctx *c, long nr, unsigned long a1, unsigned long 
                           unsigned long a3, unsigned long a4, unsigned long a5,
                           unsigned long a6, uintptr_t *ret)
 {
-    pid_t tid = c->tids[0];
+    pid_t tid = -1;
     struct user_regs_struct orig, regs;
 
-    if (ptrace(PTRACE_GETREGS, tid, 0, &orig) != 0)
-        return -1;
+    /*
+     * 不在被内核中断的阻塞系统调用上劫持执行流：这会破坏 futex
+     * 等系统调用的 ERESTARTSYS 语义，导致应用在 pthread_join 中报错。
+     * 只选择已经 ptrace 停止、且当前在用户代码中的线程执行远程 mmap。
+     * 找不到安全线程时拒绝插入，而不是悄悄损坏原进程上下文。
+     */
+    for (int i = 0; i < c->nthreads; ++i) {
+        if (!c->seized[i]) continue;
+        if (ptrace(PTRACE_GETREGS, c->tids[i], 0, &regs) != 0) continue;
+        if (regs.orig_rax == (unsigned long)-1) {
+            tid = c->tids[i];
+            orig = regs;
+            break;
+        }
+    }
+    if (tid < 0) { errno = EBUSY; return -1; }
     regs = orig;
     regs.rax = nr;
     regs.rdi = a1; regs.rsi = a2; regs.rdx = a3;
@@ -527,6 +603,9 @@ const tramp_layout_t *tramp_layout(void)
         l.off_ring = (int)(ludp_tramp_ring_ptr - ludp_tramp_start);
         l.off_pid = (int)(ludp_tramp_probe_id - ludp_tramp_start);
         l.off_rdfsbase = (int)(ludp_tramp_rdfsbase - ludp_tramp_start);
+        l.off_return_rdfsbase = (int)(ludp_tramp_return_rdfsbase - ludp_tramp_start);
+        l.off_slots = (int)(ludp_tramp_slots - ludp_tramp_start);
+        l.off_flags = (int)(ludp_tramp_flags - ludp_tramp_start);
         init = 1;
     }
     return &l;
@@ -534,7 +613,7 @@ const tramp_layout_t *tramp_layout(void)
 
 int tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
                 uintptr_t ring_addr, uintptr_t ret_addr,
-                const uint8_t *reloc_bytes, int reloc_len)
+                const uint8_t *reloc_bytes, int reloc_len, unsigned flags)
 {
     const tramp_layout_t *tl = tramp_layout();
     int total = tl->total_size;
@@ -548,12 +627,15 @@ int tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
     memcpy(buf + tl->off_ring, &ring_addr, 8);
     memcpy(buf + tl->off_pid, &probe_id, 8);
 
+    u64 f = flags;
+    memcpy(buf + tl->off_slots, &c->return_slots, 8);
+    memcpy(buf + tl->off_flags, &f, 8);
+
     if (!c->fsgsbase) {
-        /* replace `rdfsbase %rax` (F3 0F AE C0) with `xor %rax,%rax; nop` */
-        buf[tl->off_rdfsbase + 0] = 0x48;
-        buf[tl->off_rdfsbase + 1] = 0x31;
-        buf[tl->off_rdfsbase + 2] = 0xC0;
-        buf[tl->off_rdfsbase + 3] = 0x90;
+        /* rdfsbase %rax is FIVE bytes: F3 48 0F AE C0. */
+        const uint8_t fallback[5] = {0x31, 0xc0, 0x90, 0x90, 0x90};
+        memcpy(buf + tl->off_rdfsbase, fallback, sizeof fallback);
+        memcpy(buf + tl->off_return_rdfsbase, fallback, sizeof fallback);
     }
 
     if (reloc_len > tl->reloc_size)
@@ -600,6 +682,8 @@ int relocate_orig(const uint8_t *orig, int orig_len, uintptr_t orig_addr,
                 memcpy(&r32, orig + pos + insn.rel_off, 4);
                 target += (int64_t)r32;
             }
+            if (target >= orig_addr && target < orig_addr + orig_len)
+                target = new_addr + (target - orig_addr);
             int64_t nd = (int64_t)target - (int64_t)(new_addr + pos + l);
             if (insn.rel_size == 1) {
                 if (nd < -128 || nd > 127)
@@ -620,18 +704,14 @@ int relocate_orig(const uint8_t *orig, int orig_len, uintptr_t orig_addr,
 
 /* ============================ events ============================ */
 
-/* Drain committed events (ready-flag protocol, no producer-side commit spin).
- * Bulk-reads ready flags, finds the consecutive-ready prefix, then bulk-reads
- * the matching event payloads -- two preads per ring segment, not per event.
- *
- * If a producer ever laps us (consumer > cap behind), the ready flag holds a
- * sequence number *ahead* of what we expect. We skip straight to that sequence
- * instead of stalling: without this recovery the consumer would wait forever
- * on an already-overwritten slot. */
+/* Drain the consecutive published prefix. Producers drop on full and cannot
+ * reuse any of these payloads until our final watermark store. */
 int events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
 {
     enum { FLAG_CHUNK = 8192 };
     u64 flags[FLAG_CHUNK];
+    if (!c || !out || max < 0) return -1;
+    if (n) *n = 0;
     int count = 0;
     u64 consumed = c->consumed;
 
@@ -648,35 +728,37 @@ int events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
         /* Bulk-read ready flags for this contiguous ring segment. */
         uintptr_t fa = c->ring_addr + LUDP_READY_OFF + idx * 8;
         if (mem_read(c, fa, flags, (size_t)chunk * 8) != 0)
-            break;
+            return -1;
 
         /* How many leading slots are published (ready == logical seq + 1)? */
         u64 ready = 0;
         while (ready < chunk && flags[ready] == consumed + ready + 1)
             ready++;
 
-        if (ready == 0) {
-            u64 v = flags[0];
-            if (v < consumed + 1)
-                break;               /* not published yet (or stale wrap)   */
-            /* v > consumed+1: a producer lapped us. Jump to the newest slot. */
-            consumed = v - 1;
-            continue;
-        }
+        if (ready == 0) break;
 
         /* Bulk-read the matching event payloads. */
         uintptr_t ea = c->ring_addr + c->events_off + idx * LUDP_EVENT_SZ;
         if (mem_read(c, ea, out + count, (size_t)ready * LUDP_EVENT_SZ) != 0)
-            break;
+            return -1;
 
+        for (u64 k = 0; k < ready; ++k) {
+            u64 id = out[count + k].probe_id;
+            /* IDs normally match allocation order. Avoid a registry scan per
+             * event on the high-volume path; failed insertions may leave gaps. */
+            int pi = id > 0 && id <= (u64)c->nprobes &&
+                     c->probes[id - 1].used && c->probes[id - 1].id == id
+                         ? (int)id - 1 : find_probe(c, id);
+            if (pi >= 0 && out[count + k].type == LUDP_EVENT_ENTRY)
+                c->probes[pi].hits++;
+        }
         consumed += ready;
         count += (int)ready;
     }
 
-    c->consumed = consumed;
-
     /* Publish our watermark so producers can compute overflow accurately. */
-    mem_write(c, c->ring_addr + RO_COMMITTED, &consumed, 8);
+    if (mem_write(c, c->ring_addr + RO_COMMITTED, &consumed, 8) != 0) return -1;
+    c->consumed = consumed;
 
     if (n)
         *n = count;
@@ -685,21 +767,55 @@ int events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
 
 /* ============================ lifecycle ============================ */
 
+static u64 configured_ring_cap(void)
+{
+    const char *v = getenv("LUDP_RING_CAP");
+    if (!v || !*v)
+        return LUDP_RING_CAP_DEFAULT;
+    errno = 0;
+    char *end = NULL;
+    unsigned long long cap = strtoull(v, &end, 10);
+    if (errno || end == v || *end || cap < 16 ||
+        cap > LUDP_RING_CAP_DEFAULT || (cap & (cap - 1))) {
+        errno = EINVAL;
+        return 0;
+    }
+    return (u64)cap;
+}
+
 static bool cpu_has_fsgsbase(void)
 {
-    FILE *f = fopen("/proc/cpuinfo", "r");
-    if (!f)
-        return false;
-    char line[512];
-    bool found = false;
-    while (fgets(line, sizeof line, f)) {
-        if (strstr(line, "flags") && strstr(line, "fsgsbase")) {
-            found = true;
-            break;
+    /* CPU support alone does not imply the kernel enabled CR4.FSGSBASE. */
+    return (getauxval(AT_HWCAP2) & HWCAP2_FSGSBASE) != 0;
+}
+
+int return_slots_init(ludp_ctx *c)
+{
+    if (c->return_slots) return 0;
+    /* Return-address substitution is incompatible with an active CET SHSTK. */
+    char path[64], line[512];
+    snprintf(path, sizeof path, "/proc/%d/status", c->pid);
+    FILE *status = fopen(path, "r");
+    if (!status) return -1;
+    while (fgets(line, sizeof line, status)) {
+        if (!strncmp(line, "x86_Thread_features:", 20) && strstr(line, "shstk")) {
+            fclose(status); errno = ENOTSUP; return -1;
         }
     }
-    fclose(f);
-    return found;
+    fclose(status);
+    size_t size = LUDP_RETURN_SLOTS * LUDP_RETURN_SLOT_SZ;
+    uint8_t *buf = calloc(1, size);
+    if (!buf) return -1;
+    size_t stub_size = ludp_return_stub_end - ludp_return_stub;
+    if (stub_size != 64) { free(buf); return -1; }
+    for (int i = 0; i < LUDP_RETURN_SLOTS; ++i)
+        memcpy(buf + i * LUDP_RETURN_SLOT_SZ, ludp_return_stub, stub_size);
+    uintptr_t base = 0;
+    int rc = remote_mmap(c, size, PROT_READ | PROT_WRITE | PROT_EXEC, &base);
+    if (!rc) rc = mem_write(c, base, buf, size);
+    if (!rc) c->return_slots = base;
+    free(buf);
+    return rc;
 }
 
 ludp_ctx *ludp_attach(pid_t pid)
@@ -737,7 +853,9 @@ ludp_ctx *ludp_attach(pid_t pid)
         goto fail;
 
     /* ring buffer: RW mapping + header */
-    c->ring_cap = LUDP_RING_CAP_DEFAULT;
+    c->ring_cap = configured_ring_cap();
+    if (!c->ring_cap)
+        goto fail;
     c->ring_mask = c->ring_cap - 1;
     c->events_off = LUDP_READY_OFF + (u64)c->ring_cap * 8;  /* after ready flags */
     size_t ring_bytes = c->events_off + (size_t)c->ring_cap * LUDP_EVENT_SZ;
@@ -818,12 +936,29 @@ int ludp_probe_add(ludp_ctx *c, const char *lib, const char *sym, u64 *id_out)
     uintptr_t addr;
     if (elf_resolve(c->pid, lib, sym, &addr, NULL, 0) != 0)
         return -1;
-    return probe_add_internal(c, sym, (lib && lib[0]) ? lib : "", addr, id_out);
+    return probe_add_internal(c, sym, (lib && lib[0]) ? lib : "", addr, LUDP_PROBE_ENTRY, id_out);
 }
 
 int ludp_probe_add_addr(ludp_ctx *c, const char *sym, uintptr_t addr, u64 *id_out)
 {
-    return probe_add_internal(c, sym, "", addr, id_out);
+    return probe_add_internal(c, sym, "", addr, LUDP_PROBE_ENTRY, id_out);
+}
+
+int ludp_probe_add_ex(ludp_ctx *c, const char *lib, const char *sym, unsigned flags, u64 *id_out)
+{
+    uintptr_t addr;
+    if (!c || !sym || elf_resolve(c->pid, lib, sym, &addr, NULL, 0)) return -1;
+    return probe_add_internal(c, sym, lib ? lib : "", addr, flags, id_out);
+}
+
+int ludp_probe_add_addr_ex(ludp_ctx *c, const char *sym, uintptr_t addr, unsigned flags, u64 *id_out)
+{
+    return probe_add_internal(c, sym, "", addr, flags, id_out);
+}
+
+u64 ludp_return_missed(ludp_ctx *c)
+{
+    return mem_read_u64(c, c->ring_addr + 168);
 }
 
 int ludp_probe_remove(ludp_ctx *c, u64 id)

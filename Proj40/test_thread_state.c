@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 /* 回归测试：对已经运行的多线程进程附加，覆盖阻塞 futex 的主线程。 */
 #include "ludp_internal.h"
+#include <dlfcn.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -62,7 +63,10 @@ static int run_case(int leader_in_futex) {
             if (ctx->tids[j] == ctx->tids[i]) failed = 1;
     }
     u64 id = 0;
-    if (!failed && ludp_probe_add_ex(ctx, "libc.so.6", "getpid",
+    /* This child was forked without exec and shares the parent's libc layout.
+     * The on-disk filename varies between glibc releases. */
+    uintptr_t getpid_addr = (uintptr_t)dlsym(RTLD_DEFAULT, "getpid");
+    if (!failed && ludp_probe_add_addr_ex(ctx, "getpid", getpid_addr,
                     LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, &id)) failed = 1;
     if (!failed) {
         atomic_store(&state->go, 1);

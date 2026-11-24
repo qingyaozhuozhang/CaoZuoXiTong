@@ -155,7 +155,9 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     if (!c || (flags != LUDP_PROBE_ENTRY && flags != (LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN))) {
         errno = EINVAL; return -1;
     }
-    if (c->nprobes >= LUDP_MAX_PROBES || addr == 0)
+    int idx = 0;
+    while (idx < c->nprobes && c->probes[idx].used) ++idx;
+    if (c->closing || idx == LUDP_MAX_PROBES || addr == 0)
         return -1;
     bool was_stopped = c->stopped;
     if (quiesce(c) != 0) { fprintf(stderr, "[probe] quiesce fail\n"); return -1; }
@@ -169,10 +171,9 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         if (!was_stopped) resume(c);
         return -1;
     }
-    int idx = c->nprobes;
+    int previous_count = c->nprobes;
     probe_t *p = &c->probes[idx];
     memset(p, 0, sizeof *p);
-    p->used = 1;
     p->id = c->next_id++;
     snprintf(p->sym, sizeof p->sym, "%s", sym ? sym : "?");
     snprintf(p->lib, sizeof p->lib, "%s", lib ? lib : "");
@@ -182,7 +183,7 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     p->chain_next = -1;
     p->chain_prev = -1;
 
-    int h = head_of(c, addr);
+    int h = existing;
     if (h >= 0) {
         /* chained probe: share the original instruction bytes */
         memcpy(p->orig, c->probes[h].orig, sizeof p->orig);
@@ -215,7 +216,10 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     }
 
     const tramp_layout_t *tl = tramp_layout();
-    p->tramp = tramp_alloc(c, addr, tl->total_size);
+    /* A retired fixed-size slot can be reused once its prior probe drained. */
+    retired_slot **reuse = &c->retired;
+    while (*reuse && !in_rel32(addr, (*reuse)->addr)) reuse = &(*reuse)->next;
+    p->tramp = *reuse ? (*reuse)->addr : tramp_alloc(c, addr, tl->total_size);
     if (!p->tramp) {
         fprintf(stderr, "[probe] no reachable exec mem sym=%s\n", sym);
         if (!was_stopped) resume(c);
@@ -230,27 +234,34 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         if (!was_stopped) resume(c);
         return -1;
     }
-    if (c->far_valid && p->tramp >= c->far_base &&
-        p->tramp < c->far_base + c->far_size)
-        c->far_next = p->tramp + tl->total_size;
-    else
-        c->exec_next = p->tramp + tl->total_size;
     if (relocate_orig(p->orig, p->orig_len, addr, p->tramp + tl->reloc_off,
                       reloc, sizeof reloc) < 0) {
         p->used = 0; if (!was_stopped) resume(c);
         return -1;
     }
     if (h >= 0) c->probes[h].chain_prev = idx;
-    c->nprobes = idx + 1;
+    p->used = 1;
+    if (idx == c->nprobes) ++c->nprobes;
 
     if (rebuild_addr(c, addr) != 0) {
         fprintf(stderr, "[probe] rebuild fail sym=%s\n", sym);
-        c->nprobes = idx;
+        c->nprobes = previous_count;
         p->used = 0;
         if (h >= 0) { c->probes[h].chain_prev = -1; rebuild_addr(c, addr); }
         else write_patch(c, addr, 0, p->orig, p->orig_len);
         if (!was_stopped) resume(c);
         return -1;
+    }
+
+    if (*reuse) {
+        retired_slot *slot = *reuse;
+        *reuse = slot->next;
+        free(slot);
+    } else if (c->far_valid && p->tramp >= c->far_base &&
+               p->tramp < c->far_base + c->far_size) {
+        c->far_next = p->tramp + tl->total_size;
+    } else {
+        c->exec_next = p->tramp + tl->total_size;
     }
 
     if (!was_stopped) resume(c);
@@ -259,54 +270,72 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     return 0;
 }
 
+/* Commit the registry change only after the existing patch operation succeeds.
+ * A failed rollback leaves the target stopped for a retry. */
+static int switch_stopped(ludp_ctx *c, probe_t *p, bool enable)
+{
+    bool previous = p->enabled;
+    if (previous == enable && !p->needs_rebuild) return 0;
+    p->enabled = enable;
+    if (!rebuild_addr(c, p->addr)) {
+        p->needs_rebuild = false;
+        return 0;
+    }
+    int err = errno;
+    p->enabled = previous;
+    p->needs_rebuild = rebuild_addr(c, p->addr) != 0;
+    errno = p->needs_rebuild ? EIO : err;
+    return -1;
+}
+
 int probe_remove_internal(ludp_ctx *c, u64 id)
 {
-    int i = find_probe(c, id);
-    if (i < 0)
-        return -1;
-    bool was_stopped = c->stopped;
-    if (quiesce(c) != 0)
-        return -1;
-
+    int i = c ? find_probe(c, id) : -1;
+    if (i < 0) { errno = ENOENT; return -1; }
+    bool running = !c->stopped;
+    if (quiesce(c)) return -1;
     probe_t *p = &c->probes[i];
-    uintptr_t addr = p->addr;
-
-    if (p->chain_prev >= 0)
-        c->probes[p->chain_prev].chain_next = p->chain_next;
-    if (p->chain_next >= 0)
-        c->probes[p->chain_next].chain_prev = p->chain_prev;
-    p->used = 0;
-
-    bool any = false;
-    for (int k = 0; k < c->nprobes; k++) {
-        if (c->probes[k].used && c->probes[k].addr == addr) {
-            any = true;
-            break;
-        }
+    bool last = !c->closing && ludp_probe_count(c) == 1;
+    /* A return probe can still own a frame after its entry is disabled. */
+    int rc = c->closing ? 0 : probe_storage_idle(c);
+    retired_slot *slot = NULL;
+    if (!rc && !last && !c->closing) {
+        slot = malloc(sizeof *slot);
+        if (!slot) rc = -1;
     }
-    if (any)
-        rebuild_addr(c, addr);
-    else
-        write_patch(c, addr, 0, p->orig, p->orig_len);
-
-    if (!was_stopped) resume(c);
-    return 0;
+    if (!rc) rc = switch_stopped(c, p, false);
+    if (!rc && last) {
+        p->retiring = true;
+        rc = release_idle_storage(c, false);
+    }
+    if (!rc) {
+        if (p->chain_prev >= 0)
+            c->probes[p->chain_prev].chain_next = p->chain_next;
+        if (p->chain_next >= 0)
+            c->probes[p->chain_next].chain_prev = p->chain_prev;
+        p->used = 0;
+        if (slot) {
+            *slot = (retired_slot){p->tramp, c->retired};
+            c->retired = slot;
+        }
+        while (c->nprobes && !c->probes[c->nprobes - 1].used) --c->nprobes;
+    } else {
+        free(slot);
+    }
+    if (running && !p->needs_rebuild && resume(c)) return -1;
+    return rc;
 }
 
 int probe_set_enabled(ludp_ctx *c, u64 id, bool en)
 {
-    int i = find_probe(c, id);
-    if (i < 0)
-        return -1;
-    if (c->probes[i].enabled == en)
-        return 0;
-    bool was_stopped = c->stopped;
-    if (quiesce(c) != 0)
-        return -1;
-
-    c->probes[i].enabled = en;
-    int rc = rebuild_addr(c, c->probes[i].addr);
-
-    if (!was_stopped) resume(c);
+    int i = c ? find_probe(c, id) : -1;
+    if (i < 0) { errno = ENOENT; return -1; }
+    probe_t *p = &c->probes[i];
+    if (c->closing || p->retiring) { errno = EBUSY; return -1; }
+    if (p->enabled == en && !p->needs_rebuild) return 0;
+    bool running = !c->stopped;
+    if (quiesce(c)) return -1;
+    int rc = switch_stopped(c, p, en);
+    if (running && !p->needs_rebuild && resume(c)) return -1;
     return rc;
 }

@@ -52,8 +52,9 @@ typedef struct {
 
 /* 进程附加：附加所有线程并进入暂停状态。 */
 ludp_ctx *ludp_attach(pid_t pid);
-/* 清理当前入口补丁并分离；远程映射完全回收（F4）尚未完成。 */
-void ludp_detach(ludp_ctx *ctx);
+/* 在应用安全点恢复入口、释放本会话的映射并分离。成功返回 0 并销毁 ctx。
+ * 有在途探针时返回 -1/EBUSY；待调用返回后重试。其他清理错误也保留 ctx。 */
+int ludp_detach(ludp_ctx *ctx);
 
 /* ELF 符号解析；lib 为 NULL/空串时表示主程序。 */
 int ludp_resolve(ludp_ctx *ctx, const char *lib, const char *sym, uintptr_t *addr);
@@ -72,7 +73,7 @@ int ludp_probe_add_addr_ex(ludp_ctx *ctx, const char *sym, uintptr_t addr,
                            unsigned flags, u64 *id_out);
 u64 ludp_return_missed(ludp_ctx *ctx);
 
-/* 与 F4–F6 有关的兼容接口：本阶段不宣称完成相应赛题验收。 */
+/* F4/F5：在应用安全点移除或切换探针。重复 enable/disable 幂等。 */
 int ludp_probe_remove(ludp_ctx *ctx, u64 id);
 int ludp_probe_enable(ludp_ctx *ctx, u64 id);
 int ludp_probe_disable(ludp_ctx *ctx, u64 id);

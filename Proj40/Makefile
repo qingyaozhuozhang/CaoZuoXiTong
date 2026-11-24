@@ -5,7 +5,7 @@ CFLAGS   ?= -O2 -g -Wall -Wextra -fno-strict-aliasing -pthread
 LDFLAGS  ?= -pthread
 
 LIB_OBJS = ludp.o probes.o x86dec.o elf.o trampoline.o
-TEST_BINS = test_decode test_f123 test_thread_state bench_f123 demo_f123
+TEST_BINS = test_decode test_f123 test_f45 test_thread_state bench_f123 demo_f123
 
 .PHONY: all test benchmark clean
 all: libludp.a libtest.so $(TEST_BINS)
@@ -21,6 +21,9 @@ test_decode: test_decode.c libludp.a
 
 test_f123: test_f123.c test_abi.S libtest.so libludp.a
 	$(CC) $(CFLAGS) -rdynamic -o $@ test_f123.c test_abi.S libludp.a -ldl -L. -ltest -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
+
+test_f45: test_f45.c libludp.a
+	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -o $@ $< libludp.a $(LDFLAGS)
 
 test_thread_state: test_thread_state.c libludp.a
 	$(CC) $(CFLAGS) -rdynamic -o $@ $< libludp.a -ldl $(LDFLAGS)
@@ -40,6 +43,7 @@ trampoline.o: trampoline.S
 test: all
 	./test_decode
 	./test_f123
+	./test_f45
 	./test_thread_state
 	./demo_f123
 

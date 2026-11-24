@@ -495,16 +495,95 @@ static int remote_syscall(ludp_ctx *c, long nr, unsigned long a1, unsigned long 
     return 0;
 }
 
+/* All entries are mappings allocated by this context. A failed release
+ * stays on the list so teardown can retry without touching other mappings. */
+static void record_mapping(ludp_ctx *c, owned_mapping *m, uintptr_t base,
+                           size_t size, int prot)
+{
+    *m = (owned_mapping){base, size, (prot & PROT_EXEC) != 0, c->mappings};
+    c->mappings = m;
+}
+
+int release_idle_storage(ludp_ctx *c, bool closing)
+{
+    while (c->retired) {
+        retired_slot *slot = c->retired;
+        c->retired = slot->next;
+        free(slot);
+    }
+    owned_mapping **link = &c->mappings;
+    while (*link) {
+        owned_mapping *m = *link;
+        if (!closing && (m->base == c->exec_base || m->base == c->ring_addr)) {
+            link = &m->next;
+            continue;
+        }
+        uintptr_t result;
+        if (remote_syscall(c, __NR_munmap, m->base, m->size, 0, 0, 0, 0, &result))
+            return -1;
+        if (result) { errno = -(long)result; return -1; }
+        if (m->base == c->return_slots) {
+            c->return_slots = 0;
+            c->slots_ready = false;
+        }
+        if (m->base == c->far_base) c->far_valid = false;
+        if (m->base == c->exec_base) c->exec_base = 0;
+        if (m->base == c->ring_addr) c->ring_addr = 0;
+        *link = m->next;
+        free(m);
+    }
+    c->exec_next = c->exec_base;
+    return 0;
+}
+
+/* The caller also coordinates a safe point with the application: a signal
+ * handler could otherwise conceal a trampoline PC in a saved signal frame. */
+int probe_storage_idle(ludp_ctx *c)
+{
+    bool has_user_thread = false;
+    for (int i = 0; i < c->nthreads; ++i) {
+        struct user_regs_struct regs;
+        if (!c->seized[i]) continue;
+        if (ptrace(PTRACE_GETREGS, c->tids[i], 0, &regs)) return -1;
+        if (regs.orig_rax == (unsigned long)-1) has_user_thread = true;
+        for (owned_mapping *m = c->mappings; m; m = m->next) {
+            if (m->executable && regs.rip >= m->base && regs.rip - m->base < m->size) {
+                errno = EBUSY;
+                return -1;
+            }
+        }
+    }
+    if (c->mappings && !has_user_thread) {
+        errno = EBUSY;
+        return -1;
+    }
+    if (c->slots_ready) {
+        /* Byte 64 is the owner word in trampoline.S. Read 64 slots at once. */
+        u64 batch[64 * LUDP_RETURN_SLOT_SZ / sizeof(u64)];
+        for (int i = 0; i < LUDP_RETURN_SLOTS; i += 64) {
+            if (mem_read(c, c->return_slots + i * LUDP_RETURN_SLOT_SZ, batch, sizeof batch))
+                return -1;
+            for (int j = 0; j < 64; ++j) {
+                if (batch[(j * LUDP_RETURN_SLOT_SZ + 64) / sizeof(u64)]) {
+                    errno = EBUSY;
+                    return -1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 int remote_mmap(ludp_ctx *c, size_t size, int prot, uintptr_t *out)
 {
     uintptr_t ret = 0;
+    owned_mapping *m = malloc(sizeof *m);
+    if (!m) return -1;
     int rc = remote_syscall(c, __NR_mmap, 0, size, prot,
                             MAP_PRIVATE | MAP_ANONYMOUS,
                             (unsigned long)-1, 0, &ret);
-    if (rc != 0)
-        return -1;
-    if ((long)ret < 0)
-        return -1;
+    if (rc || (long)ret < 0) { free(m); return -1; }
+    record_mapping(c, m, ret, size, prot);
     if (out)
         *out = ret;
     return 0;
@@ -548,6 +627,8 @@ int remote_mmap_near(ludp_ctx *c, uintptr_t target, size_t size, int prot,
     const uintptr_t LIMIT = 0x78000000UL;   /* 1.875 GB, headroom for addr+5 */
     const uintptr_t STEP = 0x100000UL;      /* 1 MB scan granularity */
 
+    owned_mapping *m = malloc(sizeof *m);
+    if (!m) return -1;
     for (int dir = 0; dir < 2; dir++) {
         for (uintptr_t off = 0; off <= LIMIT; off += STEP) {
             int64_t cand = dir == 0 ? (int64_t)target + (int64_t)off
@@ -569,13 +650,16 @@ int remote_mmap_near(ludp_ctx *c, uintptr_t target, size_t size, int prot,
                                     MAP_PRIVATE | MAP_ANONYMOUS |
                                         MAP_FIXED_NOREPLACE,
                                     (unsigned long)-1, 0, &ret);
-            if (rc == 0 && ret == p) {
+            if (rc == 0 && (long)ret >= 0) {
+                record_mapping(c, m, ret, size, prot);
+                if (ret != p) { errno = ENOTSUP; return -1; }
                 if (out)
                     *out = p;
                 return 0;
             }
         }
     }
+    free(m);
     return -1;
 }
 
@@ -786,12 +870,16 @@ static u64 configured_ring_cap(void)
 static bool cpu_has_fsgsbase(void)
 {
     /* CPU support alone does not imply the kernel enabled CR4.FSGSBASE. */
+#ifdef HWCAP2_FSGSBASE
     return (getauxval(AT_HWCAP2) & HWCAP2_FSGSBASE) != 0;
+#else
+    return false; /* Older Linux headers: use the existing TLS fallback. */
+#endif
 }
 
 int return_slots_init(ludp_ctx *c)
 {
-    if (c->return_slots) return 0;
+    if (c->slots_ready) return 0;
     /* Return-address substitution is incompatible with an active CET SHSTK. */
     char path[64], line[512];
     snprintf(path, sizeof path, "/proc/%d/status", c->pid);
@@ -810,10 +898,11 @@ int return_slots_init(ludp_ctx *c)
     if (stub_size != 64) { free(buf); return -1; }
     for (int i = 0; i < LUDP_RETURN_SLOTS; ++i)
         memcpy(buf + i * LUDP_RETURN_SLOT_SZ, ludp_return_stub, stub_size);
-    uintptr_t base = 0;
-    int rc = remote_mmap(c, size, PROT_READ | PROT_WRITE | PROT_EXEC, &base);
-    if (!rc) rc = mem_write(c, base, buf, size);
-    if (!rc) c->return_slots = base;
+    int rc = 0;
+    if (!c->return_slots)
+        rc = remote_mmap(c, size, PROT_READ | PROT_WRITE | PROT_EXEC, &c->return_slots);
+    if (!rc) rc = mem_write(c, c->return_slots, buf, size);
+    c->slots_ready = rc == 0;
     free(buf);
     return rc;
 }
@@ -840,7 +929,11 @@ ludp_ctx *ludp_attach(pid_t pid)
         free(c);
         return NULL;
     }
-    add_thread(c, pid);
+    if (add_thread(c, pid) < 0) {
+        ptrace(PTRACE_INTERRUPT, pid, 0, 0);
+        if (wait_stop(pid, 3000) >= 0) ptrace(PTRACE_DETACH, pid, 0, 0);
+        goto fail;
+    }
     c->seized[0] = true;
 
     if (threads_refresh(c) != 0)
@@ -863,12 +956,13 @@ ludp_ctx *ludp_attach(pid_t pid)
         goto fail;
 
     u64 zero = 0;
-    mem_write(c, c->ring_addr + RO_SEQ, &zero, 8);
-    mem_write(c, c->ring_addr + RO_COMMITTED, &zero, 8);
-    mem_write(c, c->ring_addr + RO_CAP, &c->ring_cap, 8);
-    mem_write(c, c->ring_addr + RO_OVERFLOW, &zero, 8);
-    mem_write(c, c->ring_addr + RO_MASK, &c->ring_mask, 8);
-    mem_write(c, c->ring_addr + RO_EVENTS_OFF, &c->events_off, 8);
+    if (mem_write(c, c->ring_addr + RO_SEQ, &zero, 8) ||
+        mem_write(c, c->ring_addr + RO_COMMITTED, &zero, 8) ||
+        mem_write(c, c->ring_addr + RO_CAP, &c->ring_cap, 8) ||
+        mem_write(c, c->ring_addr + RO_OVERFLOW, &zero, 8) ||
+        mem_write(c, c->ring_addr + RO_MASK, &c->ring_mask, 8) ||
+        mem_write(c, c->ring_addr + RO_EVENTS_OFF, &c->events_off, 8))
+        goto fail;
 
     /* executable trampoline pool */
     c->exec_size = LUDP_EXEC_POOL_SIZE;
@@ -884,8 +978,7 @@ ludp_ctx *ludp_attach(pid_t pid)
     return c;
 
 fail:
-    if (c->stopped)
-        resume(c);
+    if (c->mappings) release_idle_storage(c, true);
     for (int i = 0; i < c->nthreads; i++)
         if (c->seized[i])
             ptrace(PTRACE_DETACH, c->tids[i], 0, 0);
@@ -893,35 +986,44 @@ fail:
         close(c->memfd);
     free(c->tids);
     free(c->seized);
+    while (c->mappings) {
+        owned_mapping *next = c->mappings->next;
+        free(c->mappings);
+        c->mappings = next;
+    }
     free(c);
     return NULL;
 }
 
-void ludp_detach(ludp_ctx *c)
+int ludp_detach(ludp_ctx *c)
 {
-    if (!c)
-        return;
-    if (!c->attached) {
-        free(c->tids); free(c->seized); free(c);
-        return;
+    if (!c) return 0;
+    bool running = !c->stopped;
+    if (quiesce(c)) return -1;
+    if (!c->closing && probe_storage_idle(c)) {
+        int err = errno;
+        if (running) resume(c);
+        errno = err;
+        return -1;
     }
-    quiesce(c);
+    c->closing = true;
+    for (int i = c->nprobes - 1; i >= 0; --i)
+        if (c->probes[i].used && probe_remove_internal(c, c->probes[i].id))
+            return -1;
 
-    /* remove every probe (restores original instruction bytes) */
-    for (int i = c->nprobes - 1; i >= 0; i--) {
-        if (c->probes[i].used)
-            probe_remove_internal(c, c->probes[i].id);
-    }
-
-    for (int i = 0; i < c->nthreads; i++) {
-        if (c->seized[i])
-            ptrace(PTRACE_DETACH, c->tids[i], 0, 0);
+    if (release_idle_storage(c, true)) return -1;
+    for (int i = 0; i < c->nthreads; ++i) {
+        if (!c->seized[i]) continue;
+        if (ptrace(PTRACE_DETACH, c->tids[i], 0, 0) && errno != ESRCH)
+            return -1;
+        c->seized[i] = false;
     }
     if (c->memfd >= 0)
         close(c->memfd);
     free(c->tids);
     free(c->seized);
     free(c);
+    return 0;
 }
 
 /* ============================ public wrappers ============================ */

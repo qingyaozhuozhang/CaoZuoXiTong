@@ -42,6 +42,8 @@ typedef struct {
     int chain_next;         /* index of the next (older) probe at same addr, -1 */
     int chain_prev;         /* index of the previous (newer) probe at same addr, -1 */
     bool enabled;
+    bool needs_rebuild;
+    bool retiring;
     unsigned flags;
     u64 hits;
 } probe_t;
@@ -56,7 +58,23 @@ typedef struct {
     int off_return_rdfsbase, off_slots, off_flags;
 } tramp_layout_t;
 
+typedef struct owned_mapping {
+    uintptr_t base;
+    size_t size;
+    bool executable;
+    struct owned_mapping *next;
+} owned_mapping;
+
+typedef struct retired_slot {
+    uintptr_t addr;
+    struct retired_slot *next;
+} retired_slot;
+
 struct ludp_ctx {
+    retired_slot *retired;
+    owned_mapping *mappings;
+    bool slots_ready;
+    bool closing;
     pid_t pid;
     int memfd;              /* /proc/<pid>/mem, O_RDWR */
     bool fsgsbase;
@@ -139,6 +157,8 @@ int  elf_resolve(pid_t pid, const char *lib, const char *sym, uintptr_t *addr,
 int  probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
                         uintptr_t addr, unsigned flags, u64 *id_out);
 int return_slots_init(ludp_ctx *c);
+int probe_storage_idle(ludp_ctx *c);
+int release_idle_storage(ludp_ctx *c, bool closing);
 int  probe_remove_internal(ludp_ctx *c, u64 id);
 int  probe_set_enabled(ludp_ctx *c, u64 id, bool en);
 int  rebuild_addr(ludp_ctx *c, uintptr_t addr);

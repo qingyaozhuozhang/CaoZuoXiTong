@@ -23,7 +23,7 @@ extern long negative(long), recursive(long), signalled(long);
 extern void *pointer(void *);
 extern double floating(double);
 extern unsigned __int128 wide(uint64_t);
-extern long stackargs(long,long,long,long,long,long,long,long);
+extern long stackargs(long,long,long,long,long,long,long,long,long,long);
 typedef struct { atomic_int go, done, release, errors; } shared;
 static shared *s;
 static volatile sig_atomic_t signals;
@@ -50,18 +50,18 @@ static int run(unsigned flags, int fallback)
     pid_t pid=fork();
     if(pid==0) {
         signal(SIGUSR1,handler);
-        while(!atomic_load(&s->go)) __asm__ volatile("pause");
+        while(!atomic_load(&s->go)) ludp_cpu_relax();
         pthread_t th[4];
         for(int i=0;i<4;i++) if(pthread_create(&th[i],NULL,worker,NULL)) _exit(2);
         for(int i=0;i<4;i++) pthread_join(th[i],NULL);
         if(negative(123)!=-130 || pointer(s)!=s || floating(2.5)!=4.0 ||
            wide(0xdeadbeef12345678ULL)!=(((unsigned __int128)0xdeadbeef12345679ULL<<64)|0xdeadbeef12345678ULL) ||
-           stackargs(1,2,3,4,5,6,7,8)!=891 || recursive(8)!=37 || signalled(1)!=43 || signals!=1)
+           stackargs(1,2,3,4,5,6,7,8,9,10)!=920 || recursive(8)!=37 || signalled(1)!=43 || signals!=1)
             atomic_fetch_add(&s->errors,1);
         if (abi_exercise() || memcmp(abi_before,abi_after,sizeof abi_before))
             atomic_fetch_add(&s->errors,1);
         atomic_store(&s->done,1);
-        while(!atomic_load(&s->release)) __asm__ volatile("pause");
+        while(!atomic_load(&s->release)) ludp_cpu_relax();
         _exit(atomic_load(&s->errors)?1:0);
     }
     if(pid<0) return 1;
@@ -122,7 +122,7 @@ static int run(unsigned flags, int fallback)
             case 2: if(e->retval!=(uintptr_t)s) failed=1; break;
             case 3: { double x; memcpy(&x,e->xmm0,8); if(x!=4.0) failed=1; break; }
             case 4: if(e->retval!=0xdeadbeef12345678ULL || e->retval_hi!=0xdeadbeef12345679ULL) failed=1; break;
-            case 5: if(e->retval!=891) failed=1; break;
+            case 5: if(e->retval!=920) failed=1; break;
             case 6: if(e->retval!=1+e->args[0]*(e->args[0]+1)/2) failed=1; break;
             case 7: if(e->retval!=e->args[0]+42) failed=1; break;
             case 8: if(e->retval!=0xfedcba9876543210ULL) failed=1; break;
@@ -153,13 +153,13 @@ static int ring_full(void)
     if(s==MAP_FAILED) return 1;
     pid_t pid=fork();
     if(pid==0) {
-        while(!atomic_load(&s->go)) __asm__ volatile("pause");
+        while(!atomic_load(&s->go)) ludp_cpu_relax();
         for(u64 i=0;i<1000;i++) if(six(i,2,3,4,5,6)!=i+182) atomic_fetch_add(&s->errors,1);
         atomic_store(&s->done,1);
-        while(atomic_load(&s->go)!=2) __asm__ volatile("pause");
+        while(atomic_load(&s->go)!=2) ludp_cpu_relax();
         if(six(1000,2,3,4,5,6)!=1182) atomic_fetch_add(&s->errors,1);
         atomic_store(&s->done,2);
-        while(!atomic_load(&s->release)) __asm__ volatile("pause");
+        while(!atomic_load(&s->release)) ludp_cpu_relax();
         _exit(0);
     }
     if(pid<0) return 1;
@@ -194,6 +194,13 @@ cleanup:
     printf("ring overflow/recovery %s\n",failed?"FAIL":"PASS");
     return failed;
 }
-int main(void) { return run(LUDP_PROBE_ENTRY,0) | run(LUDP_PROBE_ENTRY|LUDP_PROBE_RETURN,0) |
-                       run(LUDP_PROBE_ENTRY|LUDP_PROBE_RETURN,1) | ring_full(); }
+int main(void)
+{
+    int failed = run(LUDP_PROBE_ENTRY, 0) |
+                 run(LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, 0) | ring_full();
+#if !LUDP_ARM64
+    failed |= run(LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, 1);
+#endif
+    return failed;
+}
 #endif

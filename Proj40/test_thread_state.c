@@ -23,7 +23,7 @@ static uint64_t now_ms(void) {
 static void *worker(void *arg) {
     (void)arg;
     atomic_fetch_add(&state->ready, 1);
-    while (!atomic_load(&state->go)) __asm__ volatile("pause");
+    while (!atomic_load(&state->go)) ludp_cpu_relax();
     pid_t expected = getpid();
     for (int i = 1; i < NCALLS; ++i)
         if (getpid() != expected) atomic_fetch_add(&state->errors, 1);
@@ -44,10 +44,10 @@ static int run_case(int leader_in_futex) {
         /* 第二种场景：主线程在 pthread_join/futex 中阻塞。 */
         if (!leader_in_futex)
             while (atomic_load(&state->completed) != NTHREADS)
-                __asm__ volatile("pause");
+                ludp_cpu_relax();
         for (int i = 0; i < NTHREADS; ++i) pthread_join(threads[i], NULL);
         atomic_store(&state->joined, 1);
-        while (!atomic_load(&state->release)) __asm__ volatile("pause");
+        while (!atomic_load(&state->release)) ludp_cpu_relax();
         _exit(atomic_load(&state->errors) != 0);
     }
     uint64_t deadline = now_ms() + 10000;

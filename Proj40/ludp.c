@@ -20,10 +20,13 @@
 #include <sys/syscall.h>
 #include <signal.h>
 #include <sys/auxv.h>
-#include <asm/hwcap2.h>
+#include <elf.h>
 #include "ludp_internal.h"
+#if !LUDP_ARM64
+#include <asm/hwcap2.h>
+#endif
 
-#define PTRACE_OPTS (PTRACE_O_TRACECLONE | PTRACE_O_EXITKILL)
+#define PTRACE_OPTS (PTRACE_O_TRACECLONE | PTRACE_O_EXITKILL | PTRACE_O_TRACESYSGOOD)
 
 /* trampoline template symbols (copied verbatim into the tracee) */
 extern const char ludp_tramp_start[], ludp_tramp_end[];
@@ -113,6 +116,20 @@ int mem_write(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len)
             return -1;
     }
     return 0;
+}
+
+int mem_write_code(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len)
+{
+#if LUDP_ARM64
+    /* /proc/pid/mem uses copy_to_user_page(), which synchronizes the
+     * instruction cache for executable mappings. process_vm_writev does not. */
+    ssize_t n = pwrite(c->memfd, buf, len, (off_t)addr);
+    if (n == (ssize_t)len) return 0;
+    if (n >= 0) errno = EIO;
+    return -1;
+#else
+    return mem_write(c, addr, buf, len);
+#endif
 }
 
 u64 mem_read_u64(ludp_ctx *c, uintptr_t addr)
@@ -401,6 +418,9 @@ int ludp_poll(ludp_ctx *c)
 
 static uintptr_t find_syscall_insn(ludp_ctx *c)
 {
+#if LUDP_ARM64
+    return arm64_find_svc(c);
+#else
     char mp[64];
     snprintf(mp, sizeof mp, "/proc/%d/maps", c->pid);
     FILE *f = fopen(mp, "r");
@@ -437,12 +457,17 @@ static uintptr_t find_syscall_insn(ludp_ctx *c)
     }
     free(buf);
     return found;
+#endif
 }
 
 static int remote_syscall(ludp_ctx *c, long nr, unsigned long a1, unsigned long a2,
                           unsigned long a3, unsigned long a4, unsigned long a5,
                           unsigned long a6, uintptr_t *ret)
 {
+#if LUDP_ARM64
+    const unsigned long args[6] = { a1, a2, a3, a4, a5, a6 };
+    return arm64_syscall(c, nr, args, ret);
+#else
     pid_t tid = -1;
     struct user_regs_struct orig, regs;
 
@@ -493,6 +518,7 @@ static int remote_syscall(ludp_ctx *c, long nr, unsigned long a1, unsigned long 
     if (ptrace(PTRACE_SETREGS, tid, 0, &orig) != 0)
         return -1;
     return 0;
+#endif
 }
 
 /* All entries are mappings allocated by this context. A failed release
@@ -542,12 +568,20 @@ int probe_storage_idle(ludp_ctx *c)
 {
     bool has_user_thread = false;
     for (int i = 0; i < c->nthreads; ++i) {
-        struct user_regs_struct regs;
         if (!c->seized[i]) continue;
+        uintptr_t pc;
+#if LUDP_ARM64
+        bool in_syscall;
+        if (arm64_thread_state(c->tids[i], &pc, &in_syscall)) return -1;
+        if (!in_syscall) has_user_thread = true;
+#else
+        struct user_regs_struct regs;
         if (ptrace(PTRACE_GETREGS, c->tids[i], 0, &regs)) return -1;
         if (regs.orig_rax == (unsigned long)-1) has_user_thread = true;
+        pc = regs.rip;
+#endif
         for (owned_mapping *m = c->mappings; m; m = m->next) {
-            if (m->executable && regs.rip >= m->base && regs.rip - m->base < m->size) {
+            if (m->executable && pc >= m->base && pc - m->base < m->size) {
                 errno = EBUSY;
                 return -1;
             }
@@ -601,9 +635,11 @@ int remote_mmap(ludp_ctx *c, size_t size, int prot, uintptr_t *out)
 int remote_mmap_near(ludp_ctx *c, uintptr_t target, size_t size, int prot,
                      uintptr_t *out)
 {
-    size = (size + 0xfffUL) & ~(size_t)0xfffUL;
-    if (!size)
-        size = 0x1000;
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) return -1;
+    uintptr_t page_mask = (uintptr_t)page_size - 1;
+    size = (size + page_mask) & ~page_mask;
+    if (!size) size = page_size;
 
     enum { MAXMAP = 512 };
     uintptr_t lo[MAXMAP], hi[MAXMAP];
@@ -624,7 +660,7 @@ int remote_mmap_near(ludp_ctx *c, uintptr_t target, size_t size, int prot,
     }
     fclose(f);
 
-    const uintptr_t LIMIT = 0x78000000UL;   /* 1.875 GB, headroom for addr+5 */
+    const uintptr_t LIMIT = LUDP_ARM64 ? 0x03c00000UL : 0x78000000UL;
     const uintptr_t STEP = 0x100000UL;      /* 1 MB scan granularity */
 
     owned_mapping *m = malloc(sizeof *m);
@@ -635,7 +671,7 @@ int remote_mmap_near(ludp_ctx *c, uintptr_t target, size_t size, int prot,
                                     : (int64_t)target - (int64_t)off;
             if (cand <= 0x10000)
                 continue;
-            uintptr_t p = ((uintptr_t)cand + 0xfffUL) & ~(uintptr_t)0xfffUL;
+            uintptr_t p = ((uintptr_t)cand + page_mask) & ~page_mask;
             int64_t d = (int64_t)p - (int64_t)target;
             if (d < -(int64_t)LIMIT || d > (int64_t)LIMIT)
                 continue;
@@ -686,8 +722,10 @@ const tramp_layout_t *tramp_layout(void)
         l.off_ret = (int)(ludp_tramp_ret_addr - ludp_tramp_start);
         l.off_ring = (int)(ludp_tramp_ring_ptr - ludp_tramp_start);
         l.off_pid = (int)(ludp_tramp_probe_id - ludp_tramp_start);
+#if !LUDP_ARM64
         l.off_rdfsbase = (int)(ludp_tramp_rdfsbase - ludp_tramp_start);
         l.off_return_rdfsbase = (int)(ludp_tramp_return_rdfsbase - ludp_tramp_start);
+#endif
         l.off_slots = (int)(ludp_tramp_slots - ludp_tramp_start);
         l.off_flags = (int)(ludp_tramp_flags - ludp_tramp_start);
         init = 1;
@@ -707,7 +745,11 @@ int tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
 
     memcpy(buf, ludp_tramp_start, (size_t)total);
 
+#if LUDP_ARM64
+    (void)ret_addr; /* Linked as a direct branch before the entry is patched. */
+#else
     memcpy(buf + tl->off_ret, &ret_addr, 8);
+#endif
     memcpy(buf + tl->off_ring, &ring_addr, 8);
     memcpy(buf + tl->off_pid, &probe_id, 8);
 
@@ -715,6 +757,7 @@ int tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
     memcpy(buf + tl->off_slots, &c->return_slots, 8);
     memcpy(buf + tl->off_flags, &f, 8);
 
+#if !LUDP_ARM64
     if (!c->fsgsbase) {
         /* rdfsbase %rax is FIVE bytes: F3 48 0F AE C0. */
         const uint8_t fallback[5] = {0x31, 0xc0, 0x90, 0x90, 0x90};
@@ -722,16 +765,19 @@ int tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
         memcpy(buf + tl->off_return_rdfsbase, fallback, sizeof fallback);
     }
 
+#endif
+
     if (reloc_len > tl->reloc_size)
         reloc_len = tl->reloc_size;
     if (reloc_bytes && reloc_len > 0)
         memcpy(buf + tl->reloc_off, reloc_bytes, (size_t)reloc_len);
 
-    int rc = mem_write(c, tramp_addr, buf, (size_t)total);
+    int rc = mem_write_code(c, tramp_addr, buf, (size_t)total);
     free(buf);
     return rc;
 }
 
+#if !LUDP_ARM64
 int relocate_orig(const uint8_t *orig, int orig_len, uintptr_t orig_addr,
                   uintptr_t new_addr, uint8_t *out, int out_cap)
 {
@@ -785,6 +831,7 @@ int relocate_orig(const uint8_t *orig, int orig_len, uintptr_t orig_addr,
     }
     return pos;
 }
+#endif
 
 /* ============================ events ============================ */
 
@@ -821,6 +868,10 @@ int events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
 
         if (ready == 0) break;
 
+#if LUDP_ARM64
+        /* Observe the payload after the producer's release publication. */
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+#endif
         /* Bulk-read the matching event payloads. */
         uintptr_t ea = c->ring_addr + c->events_off + idx * LUDP_EVENT_SZ;
         if (mem_read(c, ea, out + count, (size_t)ready * LUDP_EVENT_SZ) != 0)
@@ -840,6 +891,9 @@ int events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
         count += (int)ready;
     }
 
+#if LUDP_ARM64
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+#endif
     /* Publish our watermark so producers can compute overflow accurately. */
     if (mem_write(c, c->ring_addr + RO_COMMITTED, &consumed, 8) != 0) return -1;
     c->consumed = consumed;
@@ -880,6 +934,9 @@ static bool cpu_has_fsgsbase(void)
 int return_slots_init(ludp_ctx *c)
 {
     if (c->slots_ready) return 0;
+#if LUDP_ARM64
+    if (arm64_check_return_abi(c)) return -1;
+#else
     /* Return-address substitution is incompatible with an active CET SHSTK. */
     char path[64], line[512];
     snprintf(path, sizeof path, "/proc/%d/status", c->pid);
@@ -891,6 +948,7 @@ int return_slots_init(ludp_ctx *c)
         }
     }
     fclose(status);
+#endif
     size_t size = LUDP_RETURN_SLOTS * LUDP_RETURN_SLOT_SZ;
     uint8_t *buf = calloc(1, size);
     if (!buf) return -1;
@@ -901,10 +959,30 @@ int return_slots_init(ludp_ctx *c)
     int rc = 0;
     if (!c->return_slots)
         rc = remote_mmap(c, size, PROT_READ | PROT_WRITE | PROT_EXEC, &c->return_slots);
-    if (!rc) rc = mem_write(c, c->return_slots, buf, size);
+    if (!rc) rc = mem_write_code(c, c->return_slots, buf, size);
     c->slots_ready = rc == 0;
     free(buf);
     return rc;
+}
+
+static int check_tracee_arch(pid_t pid)
+{
+    char path[64];
+    snprintf(path, sizeof path, "/proc/%d/exe", pid);
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return -1;
+    Elf64_Ehdr hdr;
+    ssize_t n = read(fd, &hdr, sizeof hdr);
+    int saved = errno;
+    close(fd);
+    if (n < 0) { errno = saved; return -1; }
+    if (n != sizeof hdr || memcmp(hdr.e_ident, ELFMAG, SELFMAG) ||
+        hdr.e_ident[EI_CLASS] != ELFCLASS64 || hdr.e_ident[EI_DATA] != ELFDATA2LSB ||
+        hdr.e_machine != (LUDP_ARM64 ? EM_AARCH64 : EM_X86_64)) {
+        errno = ENOTSUP;
+        return -1;
+    }
+    return 0;
 }
 
 ludp_ctx *ludp_attach(pid_t pid)
@@ -915,17 +993,9 @@ ludp_ctx *ludp_attach(pid_t pid)
     c->pid = pid;
     c->memfd = -1;
 
-    char mp[64];
-    snprintf(mp, sizeof mp, "/proc/%d/mem", pid);
-    c->memfd = open(mp, O_RDWR);
-    if (c->memfd < 0) {
-        free(c);
-        return NULL;
-    }
     c->fsgsbase = cpu_has_fsgsbase();
 
     if (ptrace(PTRACE_SEIZE, pid, 0, PTRACE_OPTS) != 0) {
-        close(c->memfd);
         free(c);
         return NULL;
     }
@@ -940,6 +1010,12 @@ ludp_ctx *ludp_attach(pid_t pid)
         goto fail;
     if (quiesce(c) != 0)
         goto fail;
+
+    if (check_tracee_arch(pid)) goto fail;
+    char mp[64];
+    snprintf(mp, sizeof mp, "/proc/%d/mem", pid);
+    c->memfd = open(mp, O_RDWR | O_CLOEXEC);
+    if (c->memfd < 0) goto fail;
 
     c->syscall_insn = find_syscall_insn(c);
     if (!c->syscall_insn)
@@ -1149,7 +1225,13 @@ int ludp_mem_write(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len)
 
 u64 rdtsc_now(void)
 {
+#if LUDP_ARM64
+    u64 count;
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(count));
+    return count;
+#else
     uint32_t lo, hi;
     __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
     return ((u64)hi << 32) | lo;
+#endif
 }

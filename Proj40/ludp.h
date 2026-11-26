@@ -1,7 +1,7 @@
 /*
  * LUDP 公共接口：轻量级用户态动态探针。
  * 本阶段重点：F1 入口跳转、F2 六参数、F3 返回值。
- * 平台：Linux x86-64 / System V AMD64 ABI。
+ * 平台：Linux x86-64（SysV）和 ARM64（AAPCS64）。
  * 许可证：MIT。
  */
 #ifndef LUDP_H
@@ -25,16 +25,16 @@ typedef uint64_t u64;
 
 /* 目标进程用户态 trampoline 生成的一条事件（固定 128 字节）。 */
 typedef struct {
-    u64 tsc;          /* RDTSC 周期计数；不是纳秒 */
+    u64 tsc;          /* x86 RDTSC 或 ARM64 CNTVCT_EL0 计数 */
     u64 tid;          /* TLS 基址；不是 Linux 的内核线程号 TID */
     u64 probe_id;     /* 探针唯一编号 */
-    u64 args[6];      /* SysV INTEGER 类：RDI, RSI, RDX, RCX, R8, R9 */
+    u64 args[6];      /* 前六个整数/指针寄存器参数 */
     u64 ret_addr;     /* 原始调用者返回地址 */
     u64 type;         /* LUDP_EVENT_ENTRY 或 LUDP_EVENT_RETURN */
-    u64 retval;       /* 返回时 RAX 的原始值 */
-    u64 retval_hi;    /* 返回时 RDX，可用于双寄存器整数返回 */
+    u64 retval;       /* 返回时的 RAX 或 X0 */
+    u64 retval_hi;    /* 返回时的 RDX 或 X1 */
     u64 call_id;      /* 非零时用于入口/返回事件配对 */
-    uint8_t xmm0[16]; /* 返回时 XMM0 原始字节，调用者按 ABI 解读 */
+    uint8_t xmm0[16]; /* 返回时的 XMM0 或 V0 原始字节 */
 } ludp_event;
 
 typedef struct ludp_ctx ludp_ctx;
@@ -64,8 +64,8 @@ int ludp_probe_add(ludp_ctx *ctx, const char *lib, const char *sym, u64 *id_out)
 int ludp_probe_add_addr(ludp_ctx *ctx, const char *sym, uintptr_t addr, u64 *id_out);
 
 /* 入口+返回：flags 只能是 ENTRY 或 ENTRY|RETURN。
- * 返回模式仅支持正常的 System V ABI 返回，不支持跨被探测帧异常展开、
- * longjmp、协程换栈、不返回的函数或 CET shadow stack。
+ * 返回模式仅支持正常的 SysV / AAPCS64 返回，不支持跨被探测帧异常展开、
+ * longjmp、协程换栈、不返回的函数，以及已启用 CET SHSTK 或 ARM64 GCS 的目标。
  * 最多 4096 个同时在途的返回记录；耗尽不修改返回地址，只计数丢失。 */
 int ludp_probe_add_ex(ludp_ctx *ctx, const char *lib, const char *sym,
                       unsigned flags, u64 *id_out);

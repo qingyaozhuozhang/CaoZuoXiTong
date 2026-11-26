@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 /* 中文演示：两个共享库函数的真实入口事件、六参数和返回值。 */
-#include "ludp.h"
+#include "ludp_internal.h"
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,11 +26,11 @@ int main(void) {
     pid_t pid = fork();
     if (pid < 0) { munmap(s, sizeof(*s)); return 1; }
     if (pid == 0) {
-        while (!atomic_load(&s->go)) __asm__ volatile("pause");
+        while (!atomic_load(&s->go)) ludp_cpu_relax();
         if (six(1, 2, 3, 4, 5, 6) != 183 || floating(2.5) != 4.0)
             atomic_store(&s->error, 1);
         atomic_store(&s->done, 1);
-        while (!atomic_load(&s->release)) __asm__ volatile("pause");
+        while (!atomic_load(&s->release)) ludp_cpu_relax();
         _exit(atomic_load(&s->error) != 0);
     }
 
@@ -69,12 +69,12 @@ int main(void) {
             } else if (ev->type == LUDP_EVENT_RETURN) {
                 returns++;
                 if (ev->probe_id == integer_id)
-                    printf("F3：six 返回值（RAX）= %llu，call_id=%llu\n",
+                    printf("F3：six 整数返回值= %llu，call_id=%llu\n",
                            (unsigned long long)ev->retval, (unsigned long long)ev->call_id);
                 if (ev->probe_id == fp_id) {
                     double x = 0;
                     memcpy(&x, ev->xmm0, sizeof(x));
-                    printf("F3：floating 返回值（XMM0）= %.2f，call_id=%llu\n",
+                    printf("F3：floating 浮点返回值= %.2f，call_id=%llu\n",
                            x, (unsigned long long)ev->call_id);
                     if (x != 4.0) failed = 1;
                 }

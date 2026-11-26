@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "ludp.h"
+#include "ludp_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -57,12 +57,12 @@ static int run(const char *mode, long iters, int round)
     if(pid==0) {
         for(int i=0;i<10000;i++) (void)getpid();
         atomic_store(&s->ready,1);
-        while(!atomic_load(&s->go)) __asm__ volatile("pause");
+        while(!atomic_load(&s->go)) ludp_cpu_relax();
         uint64_t sum=0,start=ns_now();
         for(long i=0;i<iters;i++) sum+=(unsigned)getpid();
         s->ns=ns_now()-start; s->sum=sum;
         atomic_store(&s->done,1);
-        while(!atomic_load(&s->release)) __asm__ volatile("pause");
+        while(!atomic_load(&s->release)) ludp_cpu_relax();
         _exit(0);
     }
     if(pid<0) { munmap(s,sizeof *s); return 1; }

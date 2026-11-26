@@ -78,7 +78,7 @@ struct ludp_ctx {
     pid_t pid;
     int memfd;              /* /proc/<pid>/mem, O_RDWR */
     bool fsgsbase;
-    uintptr_t syscall_insn; /* address of a `syscall` instruction in vDSO */
+    uintptr_t syscall_insn; /* address of a native syscall instruction */
 
     int nthreads, cap_threads;
     pid_t *tids;            /* sorted; tids[0] == pid (leader) */
@@ -97,7 +97,7 @@ struct ludp_ctx {
 
     /* secondary RWX arena allocated *near* an out-of-range target (e.g. a
      * PIE main-program function ~0x55.. while the primary pool sits ~0x7f..).
-     * Keeps the function-entry patch a compact 5-byte `jmp rel32`. */
+     * Keeps both branches within range. */
     uintptr_t far_base;
     uintptr_t far_next;
     size_t far_size;
@@ -111,6 +111,39 @@ struct ludp_ctx {
     bool attached;
     bool stopped;           /* whether we are currently in a quiesce() */
 };
+
+/* Native ISA backend. The tracee uses the same ISA as the tracer. */
+#if defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define LUDP_ARM64 1
+#elif defined(__x86_64__) && !defined(__ILP32__)
+#define LUDP_ARM64 0
+#else
+#error "LUDP requires Linux x86-64 or little-endian Linux ARM64"
+#endif
+
+static inline void ludp_cpu_relax(void)
+{
+#if LUDP_ARM64
+    __asm__ volatile("yield");
+#else
+    __asm__ volatile("pause");
+#endif
+}
+
+int mem_write_code(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len);
+int arch_read_entry(ludp_ctx *c, uintptr_t addr, uint8_t orig[32]);
+bool arch_branch_reaches(uintptr_t from, uintptr_t to);
+int arch_write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
+                     const uint8_t *orig, int len);
+void arch_fill_nops(uint8_t *bytes, size_t len);
+int arch_link_trampoline(ludp_ctx *c, uintptr_t tramp, uintptr_t next);
+
+#if LUDP_ARM64
+uintptr_t arm64_find_svc(ludp_ctx *c);
+int arm64_syscall(ludp_ctx *c, long nr, const unsigned long args[6], uintptr_t *ret);
+int arm64_thread_state(pid_t tid, uintptr_t *pc, bool *in_syscall);
+int arm64_check_return_abi(ludp_ctx *c);
+#endif
 
 /* ---- memory ---- */
 int  mem_read(ludp_ctx *c, uintptr_t addr, void *buf, size_t len);

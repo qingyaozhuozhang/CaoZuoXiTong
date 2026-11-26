@@ -8,6 +8,8 @@
  */
 #include <stdint.h>
 #include <stddef.h>
+#include <errno.h>
+#include <string.h>
 #include "ludp_internal.h"
 
 /* Scan the ModRM (+SIB + displacement) part.
@@ -213,4 +215,51 @@ done:
     if (i + len > maxlen || i + len > 15) return 0;
     out->len = i + len;
     return out->len;
+}
+
+
+bool arch_branch_reaches(uintptr_t from, uintptr_t to)
+{
+    int64_t rel = (int64_t)to - (int64_t)from - 5;
+    return rel >= INT32_MIN && rel <= INT32_MAX;
+}
+
+int arch_read_entry(ludp_ctx *c, uintptr_t addr, uint8_t orig[32])
+{
+    if (mem_read(c, addr, orig, 32)) return -1;
+    int total = 0;
+    while (total < 5) {
+        x86_insn insn;
+        int len = x86_dec_one(orig + total, 32 - total, &insn);
+        if (len <= 0 || total + len > 32 || (insn.terminates && total + len < 5)) {
+            errno = ENOTSUP;
+            return -1;
+        }
+        total += len;
+    }
+    return total;
+}
+
+void arch_fill_nops(uint8_t *bytes, size_t len)
+{
+    memset(bytes, 0x90, len);
+}
+
+int arch_write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
+                     const uint8_t *orig, int len)
+{
+    if (!target) return mem_write_code(c, addr, orig, (size_t)len);
+    if (!arch_branch_reaches(addr, target)) { errno = ERANGE; return -1; }
+
+    uint8_t code[32];
+    arch_fill_nops(code, (size_t)len);
+    code[0] = 0xe9;
+    int32_t rel = (int32_t)((int64_t)target - (int64_t)addr - 5);
+    memcpy(code + 1, &rel, sizeof rel);
+    return mem_write_code(c, addr, code, (size_t)len);
+}
+
+int arch_link_trampoline(ludp_ctx *c, uintptr_t tramp, uintptr_t next)
+{
+    return mem_write_code(c, tramp + tramp_layout()->off_ret, &next, sizeof next);
 }

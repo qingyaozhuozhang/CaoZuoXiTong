@@ -23,7 +23,7 @@ __attribute__((noinline, noclone))
 static long measured(long x)
 {
     atomic_store(&ctl->entered, 1);
-    while (atomic_load(&ctl->hold)) __asm__ volatile("pause");
+    while (atomic_load(&ctl->hold)) ludp_cpu_relax();
     return x * 3 + 2;
 }
 
@@ -54,7 +54,7 @@ static void run_child(void)
             previous = step;
             atomic_store(&ctl->done, step);
         }
-        __asm__ volatile("pause");
+        ludp_cpu_relax();
     }
     _exit(0);
 }

@@ -30,26 +30,6 @@ int head_of(ludp_ctx *c, uintptr_t addr)
     return -1;
 }
 
-/* Write a 5-byte `jmp rel32` (+ NOP padding), or the original bytes if target==0. */
-static int write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
-                       const uint8_t *orig, int orig_len)
-{
-    uint8_t code[32];
-    if (target == 0) {
-        memcpy(code, orig, (size_t)orig_len);
-        return mem_write(c, addr, code, (size_t)orig_len);
-    }
-    int64_t rel = (int64_t)target - (int64_t)(addr + 5);
-    if (rel < INT32_MIN || rel > INT32_MAX)
-        return -1;
-    code[0] = 0xE9;
-    int32_t r32 = (int32_t)rel;
-    memcpy(code + 1, &r32, 4);
-    for (int i = 5; i < orig_len; i++)
-        code[i] = 0x90;
-    return mem_write(c, addr, code, (size_t)orig_len);
-}
-
 /* Collect enabled probes at addr in newest->oldest order. */
 static int collect_chain(ludp_ctx *c, uintptr_t addr, int *idx, int max)
 {
@@ -65,26 +45,16 @@ static int collect_chain(ludp_ctx *c, uintptr_t addr, int *idx, int max)
 
 /* ---- reachable trampoline allocation -------------------------------- */
 
-static bool in_rel32(uintptr_t from, uintptr_t to)
-{
-    int64_t d = (int64_t)to - ((int64_t)from + 5);
-    return d >= INT32_MIN && d <= INT32_MAX;
-}
-
-/* Reserve `need` bytes of RWX reachable from `addr` by a jmp rel32.
- * Prefers the primary pool (allocated near shared libraries); if `addr`
- * is out of range (e.g. PIE main-program text ~0x55.. vs pool ~0x7f..),
- * it mmaps a secondary arena right next to `addr` so the 5-byte patch
- * still works.  Returns 0 on failure. */
+/* Prefer the primary pool, then reserve an arena within branch range. */
 static uintptr_t tramp_alloc(ludp_ctx *c, uintptr_t addr, size_t need)
 {
     uintptr_t t = (c->exec_next + 7) & ~(uintptr_t)7;
-    if (t + need <= c->exec_base + c->exec_size && in_rel32(addr, t))
+    if (t + need <= c->exec_base + c->exec_size && arch_branch_reaches(addr, t))
         return t;
 
     if (c->far_valid) {
         t = (c->far_next + 7) & ~(uintptr_t)7;
-        if (t + need <= c->far_base + c->far_size && in_rel32(addr, t))
+        if (t + need <= c->far_base + c->far_size && arch_branch_reaches(addr, t))
             return t;
     }
 
@@ -99,7 +69,7 @@ static uintptr_t tramp_alloc(ludp_ctx *c, uintptr_t addr, size_t need)
     c->far_next = base;
     c->far_valid = true;
     t = (base + 7) & ~(uintptr_t)7;
-    return in_rel32(addr, t) ? t : 0;
+    return arch_branch_reaches(addr, t) ? t : 0;
 }
 
 /* Re-link the chain at addr: each enabled probe gets the right reloc bytes and
@@ -121,7 +91,7 @@ int rebuild_addr(ludp_ctx *c, uintptr_t addr)
         return 0;
 
     if (n == 0)
-        return write_patch(c, addr, 0, first->orig, first->orig_len);
+        return arch_write_patch(c, addr, 0, first->orig, first->orig_len);
 
     uint8_t reloc[32];
     for (int k = 0; k < n; k++) {
@@ -129,7 +99,7 @@ int rebuild_addr(ludp_ctx *c, uintptr_t addr)
         uintptr_t ret;
         /* NOP-fill the slot: relocate_orig only writes the first orig_len
          * bytes, the remainder must be benign NOPs, never stack garbage. */
-        memset(reloc, 0x90, sizeof reloc);
+        arch_fill_nops(reloc, sizeof reloc);
         if (k == n - 1) {
             /* oldest enabled probe: execute relocated originals and return */
             if (relocate_orig(first->orig, first->orig_len, addr,
@@ -139,13 +109,13 @@ int rebuild_addr(ludp_ctx *c, uintptr_t addr)
         } else {
             ret = c->probes[chain[k + 1]].tramp;
         }
-        if (mem_write(c, p->tramp + tl->reloc_off, reloc, (size_t)tl->reloc_size) != 0)
+        if (mem_write_code(c, p->tramp + tl->reloc_off, reloc, (size_t)tl->reloc_size) != 0)
             return -1;
-        if (mem_write(c, p->tramp + tl->off_ret, &ret, 8) != 0)
+        if (arch_link_trampoline(c, p->tramp, ret) != 0)
             return -1;
     }
 
-    return write_patch(c, addr, c->probes[chain[0]].tramp,
+    return arch_write_patch(c, addr, c->probes[chain[0]].tramp,
                        first->orig, first->orig_len);
 }
 
@@ -162,6 +132,16 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     bool was_stopped = c->stopped;
     if (quiesce(c) != 0) { fprintf(stderr, "[probe] quiesce fail\n"); return -1; }
 
+#if LUDP_ARM64
+    uint32_t first;
+    if ((addr & 3) || mem_read(c, addr, &first, sizeof first)) {
+        if (addr & 3) errno = EINVAL;
+        if (!was_stopped) resume(c);
+        return -1;
+    }
+    if ((first & UINT32_C(0xffffff3f)) == UINT32_C(0xd503241f))
+        addr += sizeof first;  /* Keep BTI at the public entry. */
+#endif
     int existing = head_of(c, addr);
     if (existing >= 0 && ((flags | c->probes[existing].flags) & LUDP_PROBE_RETURN)) {
         errno = ENOTSUP; if (!was_stopped) resume(c);
@@ -191,34 +171,17 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         p->chain_next = h;
         /* Link only after all preparation succeeds. */
     } else {
-        /* read original instructions until we cover a 5-byte jump */
-        uint8_t bytes[32];
-        if (mem_read(c, addr, bytes, sizeof bytes) != 0) {
-            fprintf(stderr, "[probe] mem_read fail sym=%s\n", sym);
+        p->orig_len = arch_read_entry(c, addr, p->orig);
+        if (p->orig_len < 0) {
             if (!was_stopped) resume(c);
             return -1;
         }
-        int total = 0;
-        while (total < 5) {
-            x86_insn insn;
-            int l = x86_dec_one(bytes + total, (int)sizeof bytes - total, &insn);
-            if (l <= 0 || total + l > (int)sizeof bytes ||
-                (insn.terminates && total + l < 5)) {
-                /* unsupported instruction at the probe site */
-                fprintf(stderr, "[probe] decode fail sym=%s total=%d\n", sym, total);
-                if (!was_stopped) resume(c);
-                return -1;
-            }
-            total += l;
-        }
-        p->orig_len = total;
-        memcpy(p->orig, bytes, (size_t)total);
     }
 
     const tramp_layout_t *tl = tramp_layout();
     /* A retired fixed-size slot can be reused once its prior probe drained. */
     retired_slot **reuse = &c->retired;
-    while (*reuse && !in_rel32(addr, (*reuse)->addr)) reuse = &(*reuse)->next;
+    while (*reuse && !arch_branch_reaches(addr, (*reuse)->addr)) reuse = &(*reuse)->next;
     p->tramp = *reuse ? (*reuse)->addr : tramp_alloc(c, addr, tl->total_size);
     if (!p->tramp) {
         fprintf(stderr, "[probe] no reachable exec mem sym=%s\n", sym);
@@ -227,7 +190,7 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     }
 
     uint8_t reloc[32];
-    memset(reloc, 0x90, sizeof reloc);
+    arch_fill_nops(reloc, sizeof reloc);
     if (tramp_build(c, p->tramp, p->id, c->ring_addr, addr + p->orig_len,
                     reloc, (int)sizeof reloc, flags) != 0) {
         fprintf(stderr, "[probe] tramp_build fail sym=%s\n", sym);
@@ -248,7 +211,7 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         c->nprobes = previous_count;
         p->used = 0;
         if (h >= 0) { c->probes[h].chain_prev = -1; rebuild_addr(c, addr); }
-        else write_patch(c, addr, 0, p->orig, p->orig_len);
+        else arch_write_patch(c, addr, 0, p->orig, p->orig_len);
         if (!was_stopped) resume(c);
         return -1;
     }

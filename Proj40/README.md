@@ -1,6 +1,19 @@
-# LUDP：轻量级用户态动态探针（F1–F3、F6–F7）
+# LUDP：轻量级用户态动态探针（F1–F7、A1）
 
-> 功能范围：F1 入口探针、F2 六参数、F3 返回值，以及已有的 F6 多探针共存、F7 多线程协调与稳定运行能力。系统架构为 Linux x86-64，遵循 System V AMD64 ABI。
+> 功能范围：F1 入口探针、F2 六参数、F3 返回值，以及已有的 F6 多探针共存、F7 多线程协调与稳定运行能力。支持 Linux x86-64（System V AMD64）及 Linux ARM64（AAPCS64）。
+
+## A1 多架构支持
+
+在对应架构的 Linux 中运行 `make clean && make test`。Makefile 根据编译器的目标选择后端，跨编译可用 `make CC=aarch64-linux-gnu-gcc AR=aarch64-linux-gnu-ar`。切换编译器目标前执行 `make clean`。跟踪器与目标进程使用相同的 64 位架构。
+
+| 平台 | 函数入口 | 参数和返回值 |
+|---|---|---|
+| x86-64 | 保持原有 `jmp rel32` 和 RIP 相对指令重定位 | `RDI、RSI、RDX、RCX、R8、R9`，返回 `RAX、RDX、XMM0` |
+| ARM64 | 一条直接 `B` 跳转，保留 BTI 入口，支持常用位置无关入口指令及 `ADR/ADRP` 重定位 | `X0–X5`，返回 `X0、X1、V0` |
+
+ARM64 后端用 `PTRACE_GETREGSET`/`PTRACE_SETREGSET` 管理线程寄存器，用直接分支执行搬移后的原指令。入口和返回在用户态发布事件。事件布局保持 128 字节，ARM64 的 `xmm0` 字段保存 `V0` 原始字节，`tsc` 字段记录 `CNTVCT_EL0`。
+
+ARM64 支持小端 Linux。当前保守地拒绝入口分支、literal load 和其他未识别入口指令。返回探针适用于正常 ABI 返回，目标的 GCS 需关闭。ARM64 的 `test_f123` 覆盖共享库符号、六个参数、整数和浮点返回、寄存器现场、BTI 后的 ADR 搬移、递归、多线程及环形缓冲区溢出恢复。后文的指令和寄存器示例使用 x86-64。
 
 ## 1. 功能完成情况
 

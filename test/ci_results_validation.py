@@ -65,7 +65,10 @@ class FixtureAPI:
             })
             evidence = {"fixture": True, "architecture": arch, "profile": profile,
                         "run_id": run["id"], "attempt": run["run_attempt"],
-                        "status": "PASS"}
+                        "status": "PASS",
+                        "mode": "full" if profile == "full" else "correctness-only",
+                        "environment": {"git_commit": run["head_sha"],
+                                        "machine": "aarch64" if arch == "arm64" else arch}}
             self.payloads[self.artifact_route(artifact_id)] = zip_payload([
                 ("ci/fixture-run/summary.json", json.dumps(evidence)),
                 ("ci/fixture-run/report.md", "Synthetic fixture report\n"),
@@ -170,6 +173,45 @@ class CIResultsValidation(unittest.TestCase):
             self.assertTrue((directory / "ci/fixture-run/01-build.log").is_file())
         self.assert_no_temporary_results()
 
+    def test_invalid_report_is_retained_but_returns_failure(self):
+        run = run_fixture()
+        for issue in ("missing", "commit", "machine", "source"):
+            with self.subTest(issue=issue):
+                api = FixtureAPI(run)
+                route = api.artifact_route(api.artifacts[0]["id"])
+                entries = [("ci/fixture-run/report.md", "Fixture report")]
+                evidence = {
+                    "mode": "full", "status": "PASS",
+                    "environment": {"git_commit": run["head_sha"], "machine": "x86_64"},
+                }
+                if issue == "commit":
+                    evidence["environment"]["git_commit"] = "0" * 40
+                if issue == "machine":
+                    evidence["environment"]["machine"] = "aarch64"
+                if issue == "source":
+                    evidence.update(source_sha256={"file": "before"},
+                                    source_sha256_after_build={"file": "after"})
+                if issue != "missing":
+                    entries.append(("ci/fixture-run/summary.json", json.dumps(evidence)))
+                api.payloads[route] = zip_payload(entries)
+                self.assertEqual(self.synchronize(run, api), 1)
+                result = self.metadata()["report_checks"]["x86_64/full"]
+                self.assertEqual(result["status"], "FAIL")
+                self.assertTrue(result["issue"])
+                self.assertTrue((self.destination / "x86_64/full/ci/fixture-run/report.md").is_file())
+                self.assert_no_temporary_results()
+
+    def test_zip_digest_mismatch_keeps_previous_result(self):
+        self.assertEqual(self.synchronize(), 0)
+        previous = self.snapshot()
+        run = run_fixture(105)
+        api = FixtureAPI(run)
+        api.artifacts[0]["digest"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(RuntimeError, "ZIP"):
+            self.synchronize(run, api)
+        self.assertEqual(self.snapshot(), previous)
+        self.assert_no_temporary_results()
+
     def test_new_run_replaces_all_previous_files(self):
         self.assertEqual(self.synchronize(), 0)
         (self.destination / "stale-pass.md").write_text("Previous run only\n", encoding="utf-8")
@@ -248,7 +290,8 @@ class CIResultsValidation(unittest.TestCase):
         if SYNC.os.sep != "\\":
             unsafe_names.append("ci\\escape")
         for name in unsafe_names:
-            with self.subTest(name=str(name)):
+            label = name.filename if isinstance(name, zipfile.ZipInfo) else name
+            with self.subTest(name=label):
                 run = run_fixture(105)
                 api = FixtureAPI(run)
                 first = api.artifacts[0]["id"]

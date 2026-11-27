@@ -9,11 +9,12 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import errno
+import hashlib
 import http.client
 import io
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import shutil
 import socket
@@ -203,14 +204,19 @@ def extract_zip(data, destination):
         for item in entries:
             path = PurePosixPath(item.filename)
             mode = item.external_attr >> 16
-            if path.is_absolute() or ".." in path.parts or "\\" in item.filename or stat.S_ISLNK(mode):
+            # Reject path components that Windows may reinterpret even
+            # when the entry appears relative under POSIX path rules.
+            unsafe = not path.parts or any(
+                part == ".." or ":" in part or part.endswith((".", " ")) or
+                PureWindowsPath(part).is_reserved() for part in path.parts)
+            if path.is_absolute() or unsafe or "\\" in item.filename or stat.S_ISLNK(mode):
                 raise RuntimeError("Artifact contains an unsafe archive path")
             target = destination.joinpath(*path.parts)
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(item) as source, target.open("wb") as output:
+                with archive.open(item) as source, target.open("xb") as output:
                     shutil.copyfileobj(source, output)
 
 
@@ -250,6 +256,35 @@ def replace_results(staged):
             shutil.rmtree(backup)
 
 
+def check_report(directory, arch, profile, head_sha):
+    reports = sorted((directory / "ci").glob("*/report.md"))
+    summaries = sorted((directory / "ci").glob("*/summary.json"))
+    if len(reports) != 1 or len(summaries) != 1 or reports[0].parent != summaries[0].parent:
+        return reports, "report.md 与 summary.json 缺失、重复或未配对"
+    try:
+        summary = json.loads(summaries[0].read_text(encoding="utf-8"))
+        environment = summary["environment"]
+        mode = summary["mode"]
+        status = summary["status"]
+        commit = environment["git_commit"]
+        machine = environment["machine"]
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError):
+        return reports, "无法读取 summary.json 或缺少报告身份字段"
+    if commit != head_sha:
+        return reports, "报告提交与 GitHub 运行不一致"
+    expected_machine = "aarch64" if arch == "arm64" else arch
+    expected_mode = "full" if profile == "full" else "correctness-only"
+    if machine != expected_machine or mode != expected_mode:
+        return reports, "报告架构或验证配置与产物名称不一致"
+    if status != "PASS":
+        return reports, "summary.json 的验证状态未通过"
+    before = summary.get("source_sha256")
+    after = summary.get("source_sha256_after_build")
+    if before is not None and after is not None and before != after:
+        return reports, "报告记录的构建前后源码校验和不一致"
+    return reports, None
+
+
 def synchronize(api, repo, run):
     validate_destination()
     run_id, attempt = run["id"], run["run_attempt"]
@@ -261,6 +296,7 @@ def synchronize(api, repo, run):
     staged = Path(tempfile.mkdtemp(prefix=".ci-results-new-", dir=PACKAGE_ROOT))
     missing = []
     downloaded = []
+    report_checks = {}
     try:
         for arch, profile in MATRIX:
             name = f"ludp-{arch}-{profile}-{run_id}-{attempt}"
@@ -271,8 +307,19 @@ def synchronize(api, repo, run):
             artifact = matches[0]
             progress(f"正在下载 {arch} / {profile}…")
             data = api.request(f"/repos/{repo}/actions/artifacts/{artifact['id']}/zip", binary=True)
-            extract_zip(data, staged / arch / profile)
-            downloaded.append({"name": name, "id": artifact["id"], "path": f"{arch}/{profile}"})
+            digest = artifact.get("digest")
+            if digest and digest != "sha256:" + hashlib.sha256(data).hexdigest():
+                raise RuntimeError(f"{name} 的 ZIP 校验和与 GitHub 不一致")
+            directory = staged / arch / profile
+            extract_zip(data, directory)
+            reports, issue = check_report(directory, arch, profile, run["head_sha"])
+            report_checks[f"{arch}/{profile}"] = {
+                "status": "FAIL" if issue else "PASS",
+                "reports": [report.relative_to(staged).as_posix() for report in reports],
+                "issue": issue,
+            }
+            downloaded.append({"name": name, "id": artifact["id"], "path": f"{arch}/{profile}",
+                               "digest": digest})
         # Even a checkout/build failure can have no artifact; retain its job log.
         warnings = []
         for job in jobs:
@@ -288,7 +335,7 @@ def synchronize(api, repo, run):
                     "run": {key: run.get(key) for key in
                             ("id", "run_attempt", "head_sha", "head_branch", "event", "status", "conclusion", "html_url", "path", "updated_at")},
                     "artifacts": downloaded, "missing_artifacts": missing, "warnings": warnings,
-                    "jobs": jobs}
+                    "report_checks": report_checks, "jobs": jobs}
         (staged / "latest.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         lines = ["# LUDP 双架构 CI 验证汇总报告", "", f"运行：[{run_id} / attempt {attempt}]({run['html_url']})",
                  f"提交：`{run['head_sha']}`；分支：`{run['head_branch']}`；GitHub 结论：**{run['conclusion']}**。", "",
@@ -296,12 +343,16 @@ def synchronize(api, repo, run):
         for job in jobs:
             lines.append(f"| {job['name'].replace('|', '/')} | {job.get('conclusion') or job['status']} |")
         lines.extend(["", "## 报告入口", "",
-                      "| 架构 | 验证配置 | 功能、正确性与性能验证报告 |",
-                      "|---|---|---|"])
+                      "| 架构 | 验证配置 | 报告校验 | 功能、正确性与性能验证报告 |",
+                      "|---|---|---|---|"])
         for arch, profile in MATRIX:
-            reports = sorted((staged / arch / profile / "ci").glob("*/report.md"))
-            links = " · ".join(f"[查看报告]({path.relative_to(staged).as_posix()})" for path in reports)
-            lines.append(f"| {arch} | {profile} | {links or '缺失，不能视为通过'} |")
+            result = report_checks.get(f"{arch}/{profile}")
+            if not result:
+                lines.append(f"| {arch} | {profile} | 缺少产物 | — |")
+                continue
+            links = " · ".join(f"[查看报告]({urllib.parse.quote(path)})" for path in result["reports"])
+            status = result["issue"] or result["status"]
+            lines.append(f"| {arch} | {profile} | {status} | {links or '缺少主报告'} |")
         lines.extend(["", "各架构目录保留上传内容：`ci/<运行时间>/report.md`、`summary.json`、原始日志与 `runner/environment.log`。"])
         lines.extend(["", "专项报告：`benchmark/benchmark.md` 为 getpid 探针性能基准；"
                       "`event-merge/report.md` 为 A3 用户态与内核事件合流验证。"
@@ -313,7 +364,8 @@ def synchronize(api, repo, run):
         (staged / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         progress("下载完成，正在替换本地 test/results/ 结果…")
         replace_results(staged)
-        return 0 if run["conclusion"] == "success" and not missing and not warnings else 1
+        reports_ok = all(result["status"] == "PASS" for result in report_checks.values())
+        return 0 if run["conclusion"] == "success" and reports_ok and not missing and not warnings else 1
     finally:
         if staged.exists():
             shutil.rmtree(staged)

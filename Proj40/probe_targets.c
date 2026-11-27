@@ -12,7 +12,7 @@ __attribute__((noinline)) unsigned __int128 wide(uint64_t x)
 { return ((unsigned __int128)(x + 1) << 64) | x; }
 __attribute__((noinline)) long stackargs(long a, long b, long c, long d,
                                       long e, long f, long g, long h, long i, long j)
-{ return a + b + c + d + e + f + g * 10 + h * 100 + i + 2 * j; }
+{ return a + b + c + d + e + f + g * 10 + h * 100 + i * 1000 + j * 10000; }
 __attribute__((noinline)) long recursive(long n)
 { if (!n) return 1; volatile long r = recursive(n - 1); return r + n; }
 __attribute__((noinline)) long signalled(long n)

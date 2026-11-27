@@ -11,6 +11,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#if !defined(__x86_64__) && !defined(__aarch64__)
+#error "LUDP supports Linux x86-64 and AArch64 only"
+#endif
+
 #define LUDP_MAX_PROBES       256
 #define LUDP_RING_CAP_DEFAULT (1u << 22)   /* 4M events, power of two */
 #define LUDP_RING_HEADER      256           /* padded header (cache-line sep)   */
@@ -19,7 +23,7 @@
 #define LUDP_RETURN_SLOTS     4096
 #define LUDP_RETURN_SLOT_SZ   256
 #define LUDP_EXEC_POOL_SIZE   (1u << 20)   /* 1 MiB trampoline arena (lazy) */
-#define LUDP_MAX_CHAIN        64
+#define LUDP_MAX_CHAIN        LUDP_MAX_PROBES
 
 /* Ring layout:
  *   [0,256)   header (seq / watermark / cap / overflow / mask / events_off)
@@ -29,6 +33,21 @@
  * never ping-pongs with the watermark read; there is no commit spin at all. */
 enum { RO_SEQ = 0, RO_COMMITTED = 64, RO_CAP = 128, RO_OVERFLOW = 136,
        RO_MASK = 144, RO_EVENTS_OFF = 152 };
+
+/* Remote ring ABI remains 128 bytes. Public ludp_event appends tracer-derived
+ * CLOCK_MONOTONIC and kernel-TID fields after this raw payload. */
+typedef struct {
+    u64 tsc;
+    u64 tid;
+    u64 probe_id;
+    u64 args[6];
+    u64 ret_addr;
+    u64 type;
+    u64 retval;
+    u64 retval_hi;
+    u64 call_id;
+    uint8_t xmm0[16];
+} ludp_raw_event;
 
 typedef struct {
     int used;
@@ -45,6 +64,9 @@ typedef struct {
     bool needs_rebuild;
     bool retiring;
     unsigned flags;
+    ludp_filter filter;
+    ludp_call_action call;
+    u64 generation;
     u64 hits;
 } probe_t;
 
@@ -54,8 +76,12 @@ typedef struct {
     int reloc_off, reloc_size;
     int data_off;
     int off_ret, off_ring, off_pid;
+    int off_exit;          /* AArch64 direct B; avoids clobbering IP registers */
     int off_rdfsbase;
     int off_return_rdfsbase, off_slots, off_flags;
+    int off_filter_op, off_filter_arg, off_filter_value, off_filter_mask;
+    int off_call_fn, off_call_data, off_call_active;
+    int off_xsave_mode, off_xsave_size, off_xsave_mask;
 } tramp_layout_t;
 
 typedef struct owned_mapping {
@@ -75,20 +101,31 @@ struct ludp_ctx {
     owned_mapping *mappings;
     bool slots_ready;
     bool closing;
+    bool unsafe_state;     /* failed ptrace rollback: never resume scratch state */
     pid_t pid;
     int memfd;              /* /proc/<pid>/mem, O_RDWR */
     bool fsgsbase;
-    uintptr_t syscall_insn; /* address of a native syscall instruction */
+    bool xsave;
+    u64 xsave_size;         /* 64-byte rounded FP/vector save area */
+    u64 xsave_mask;         /* enabled x87/SSE/AVX/AVX-512 XCR0 bits */
+    uintptr_t syscall_insn; /* syscall / svc instruction in the target vDSO */
 
     int nthreads, cap_threads;
     pid_t *tids;            /* sorted; tids[0] == pid (leader) */
     bool *seized;
+    bool *thread_stopped;   /* ptrace-stop has been consumed for this tid */
+    int *pending_sigs;      /* signal-delivery stops deferred by quiesce() */
+    u64 *fsbases;           /* stopped-thread TLS base -> Linux TID mapping */
 
     uintptr_t ring_addr;
     u64 ring_cap, ring_mask;
     u64 events_off;         /* offset of the event-payload array */
     u64 consumed;           /* local drain cursor */
     u64 overflow;           /* cumulative dropped-event counter (tracer-side) */
+    u64 clock_tsc_anchor;
+    u64 clock_mono_anchor;
+    long double clock_ns_per_tsc;
+    bool clock_ready;
 
     uintptr_t exec_base;    /* injected RWX trampoline pool (near shared libs) */
     uintptr_t exec_next;
@@ -97,7 +134,7 @@ struct ludp_ctx {
 
     /* secondary RWX arena allocated *near* an out-of-range target (e.g. a
      * PIE main-program function ~0x55.. while the primary pool sits ~0x7f..).
-     * Keeps both branches within range. */
+     * Keeps the entry patch within the architecture's direct-branch range. */
     uintptr_t far_base;
     uintptr_t far_next;
     size_t far_size;
@@ -111,39 +148,6 @@ struct ludp_ctx {
     bool attached;
     bool stopped;           /* whether we are currently in a quiesce() */
 };
-
-/* Native ISA backend. The tracee uses the same ISA as the tracer. */
-#if defined(__aarch64__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define LUDP_ARM64 1
-#elif defined(__x86_64__) && !defined(__ILP32__)
-#define LUDP_ARM64 0
-#else
-#error "LUDP requires Linux x86-64 or little-endian Linux ARM64"
-#endif
-
-static inline void ludp_cpu_relax(void)
-{
-#if LUDP_ARM64
-    __asm__ volatile("yield");
-#else
-    __asm__ volatile("pause");
-#endif
-}
-
-int mem_write_code(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len);
-int arch_read_entry(ludp_ctx *c, uintptr_t addr, uint8_t orig[32]);
-bool arch_branch_reaches(uintptr_t from, uintptr_t to);
-int arch_write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
-                     const uint8_t *orig, int len);
-void arch_fill_nops(uint8_t *bytes, size_t len);
-int arch_link_trampoline(ludp_ctx *c, uintptr_t tramp, uintptr_t next);
-
-#if LUDP_ARM64
-uintptr_t arm64_find_svc(ludp_ctx *c);
-int arm64_syscall(ludp_ctx *c, long nr, const unsigned long args[6], uintptr_t *ret);
-int arm64_thread_state(pid_t tid, uintptr_t *pc, bool *in_syscall);
-int arm64_check_return_abi(ludp_ctx *c);
-#endif
 
 /* ---- memory ---- */
 int  mem_read(ludp_ctx *c, uintptr_t addr, void *buf, size_t len);
@@ -166,7 +170,8 @@ int  wait_stop(pid_t tid, int timeout_ms);
 const tramp_layout_t *tramp_layout(void);
 int  tramp_build(ludp_ctx *c, uintptr_t tramp_addr, u64 probe_id,
                  uintptr_t ring_addr, uintptr_t ret_addr,
-                 const uint8_t *reloc_bytes, int reloc_len, unsigned flags);
+                 const uint8_t *reloc_bytes, int reloc_len, unsigned flags,
+                 const ludp_filter *filter, const ludp_call_action *call);
 
 /* ---- instruction decoder ---- */
 typedef struct {
@@ -178,6 +183,12 @@ typedef struct {
 } x86_insn;
 int  x86_dec_one(const uint8_t *p, int maxlen, x86_insn *out);
 
+#ifdef __aarch64__
+/* Return 0 on success, -1 with errno when unsupported or out of range. */
+int aarch64_decode_prefix(const uint8_t *bytes, int available, int *length);
+int aarch64_branch(uintptr_t from, uintptr_t to, uint32_t *instruction);
+#endif
+
 /* ---- relocation ---- */
 int  relocate_orig(const uint8_t *orig, int orig_len, uintptr_t orig_addr,
                    uintptr_t new_addr, uint8_t *out, int out_cap);
@@ -188,12 +199,19 @@ int  elf_resolve(pid_t pid, const char *lib, const char *sym, uintptr_t *addr,
 
 /* ---- probes (F6) ---- */
 int  probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
-                        uintptr_t addr, unsigned flags, u64 *id_out);
+                        uintptr_t addr, unsigned flags,
+                        const ludp_filter *filter,
+                        const ludp_call_action *call, u64 *id_out);
 int return_slots_init(ludp_ctx *c);
 int probe_storage_idle(ludp_ctx *c);
 int release_idle_storage(ludp_ctx *c, bool closing);
 int  probe_remove_internal(ludp_ctx *c, u64 id);
 int  probe_set_enabled(ludp_ctx *c, u64 id, bool en);
+int  probe_update_internal(ludp_ctx *c, u64 id,
+                           const ludp_probe_config *config);
+int  filter_normalize(ludp_filter *filter);
+int  call_action_normalize(ludp_ctx *c, ludp_call_action *call);
+int  probe_callback_idle(ludp_ctx *c, probe_t *probe);
 int  rebuild_addr(ludp_ctx *c, uintptr_t addr);
 int  find_probe(ludp_ctx *c, u64 id);
 int  head_of(ludp_ctx *c, uintptr_t addr);

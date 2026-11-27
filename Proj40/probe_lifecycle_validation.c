@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ludp_internal.h"
+#include "validation_arch.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdatomic.h>
@@ -23,7 +24,7 @@ __attribute__((noinline, noclone))
 static long measured(long x)
 {
     atomic_store(&ctl->entered, 1);
-    while (atomic_load(&ctl->hold)) ludp_cpu_relax();
+    while (atomic_load(&ctl->hold)) validation_cpu_relax();
     return x * 3 + 2;
 }
 
@@ -54,7 +55,7 @@ static void run_child(void)
             previous = step;
             atomic_store(&ctl->done, step);
         }
-        ludp_cpu_relax();
+        validation_cpu_relax();
     }
     _exit(0);
 }

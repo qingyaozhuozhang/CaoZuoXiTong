@@ -1,0 +1,16 @@
+started: 2026-11-27T12:05:49+08:00
+cwd: /home/chairman/github/git_me_coding/CaoZuoXiTong/Proj40
+command: ./test_f123
+
+[probe] decode fail sym=tiny_target total=0
+[probe] decode fail sym=tiny_target total=0
+[probe] decode fail sym=tiny_target total=0
+F1-F3 flags=1 PASS
+F1-F3 flags=3 PASS
+F1-F3 flags=3 PASS
+ring overflow/recovery PASS
+attach/detach churn PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.35

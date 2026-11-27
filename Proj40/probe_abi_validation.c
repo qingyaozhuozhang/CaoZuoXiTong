@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ludp_internal.h"
+#include "validation_arch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -17,14 +18,14 @@
 int main(void) { fputs("FAIL: F3 return event/API not implemented\n", stderr); return 1; }
 #else
 extern int abi_exercise(void);
-extern unsigned char abi_before[672], abi_after[672];
+extern unsigned char abi_before[VALIDATION_ABI_SNAPSHOT_SIZE], abi_after[VALIDATION_ABI_SNAPSHOT_SIZE];
 extern uint64_t six(uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t);
 extern long negative(long), recursive(long), signalled(long);
 extern void *pointer(void *);
 extern double floating(double);
 extern unsigned __int128 wide(uint64_t);
 extern long stackargs(long,long,long,long,long,long,long,long,long,long);
-typedef struct { atomic_int go, done, release, errors; } shared;
+typedef struct { atomic_int ready, go, done, release, errors; } shared;
 static shared *s;
 static volatile sig_atomic_t signals;
 static void handler(int sig) { (void)sig; if (signalled(0) == 42) signals++; }
@@ -50,21 +51,25 @@ static int run(unsigned flags, int fallback)
     pid_t pid=fork();
     if(pid==0) {
         signal(SIGUSR1,handler);
-        while(!atomic_load(&s->go)) ludp_cpu_relax();
+        atomic_store(&s->ready,1);
+        while(!atomic_load(&s->go)) validation_cpu_relax();
         pthread_t th[4];
         for(int i=0;i<4;i++) if(pthread_create(&th[i],NULL,worker,NULL)) _exit(2);
         for(int i=0;i<4;i++) pthread_join(th[i],NULL);
         if(negative(123)!=-130 || pointer(s)!=s || floating(2.5)!=4.0 ||
            wide(0xdeadbeef12345678ULL)!=(((unsigned __int128)0xdeadbeef12345679ULL<<64)|0xdeadbeef12345678ULL) ||
-           stackargs(1,2,3,4,5,6,7,8,9,10)!=920 || recursive(8)!=37 || signalled(1)!=43 || signals!=1)
+           stackargs(1,2,3,4,5,6,7,8,9,10)!=109891 || recursive(8)!=37 || signalled(1)!=43 || signals!=1)
             atomic_fetch_add(&s->errors,1);
         if (abi_exercise() || memcmp(abi_before,abi_after,sizeof abi_before))
             atomic_fetch_add(&s->errors,1);
         atomic_store(&s->done,1);
-        while(!atomic_load(&s->release)) ludp_cpu_relax();
+        while(!atomic_load(&s->release)) validation_cpu_relax();
         _exit(atomic_load(&s->errors)?1:0);
     }
     if(pid<0) return 1;
+    double ready_deadline=now()+2;
+    while(!atomic_load(&s->ready) && now()<ready_deadline) usleep(100);
+    if(!atomic_load(&s->ready)) { fputs("FAIL target startup\n",stderr); failed=1; goto cleanup; }
     ludp_ctx *ctx=ludp_attach(pid);
     if(!ctx) { perror("attach"); failed=1; goto cleanup; }
     {
@@ -74,20 +79,20 @@ static int run(unsigned flags, int fallback)
         if(ludp_mem_read(ctx,tiny,before,sizeof before) ||
            ludp_probe_add_addr_ex(ctx,"tiny_target",tiny,flags,&rejected)==0 ||
            ludp_mem_read(ctx,tiny,after,sizeof after) || memcmp(before,after,sizeof before)) {
-            fputs("FAIL unsafe short function accepted/modified\n",stderr); failed=1; goto detach;
+            fputs("FAIL unsupported function entry accepted/modified\n",stderr); failed=1; goto detach;
         }
     }
     if (fallback) ctx->fsgsbase = false;
     for(int i=0;i<9;i++) {
         int rc = i == 8 ? ludp_probe_add_addr_ex(ctx, names[i], (uintptr_t)dlsym(RTLD_DEFAULT,names[i]), flags, &ids[i]) :
-                          ludp_probe_add_ex(ctx,"libtest.so",names[i],flags,&ids[i]);
+                          ludp_probe_add_ex(ctx,"libprobe_targets.so",names[i],flags,&ids[i]);
         if(rc) {
             fprintf(stderr,"FAIL insertion %s\n",names[i]); failed=1; goto detach;
         }
     }
     if(flags & LUDP_PROBE_RETURN) {
         u64 rejected=0;
-        if(ludp_probe_add_ex(ctx,"libtest.so","six",flags,&rejected)==0) {
+        if(ludp_probe_add_ex(ctx,"libprobe_targets.so","six",flags,&rejected)==0) {
             fputs("FAIL duplicate return probe accepted\n",stderr); failed=1; goto detach;
         }
     }
@@ -120,9 +125,9 @@ static int run(unsigned flags, int fallback)
             case 0: if(e->retval!=1ULL+6+15+28+55+0xfedcba9876543210ULL*13) failed=1; break;
             case 1: if((int64_t)e->retval!=-130) failed=1; break;
             case 2: if(e->retval!=(uintptr_t)s) failed=1; break;
-            case 3: { double x; memcpy(&x,e->xmm0,8); if(x!=4.0) failed=1; break; }
+            case 3: { double x; memcpy(&x,e->fp_ret,8); if(x!=4.0) failed=1; break; }
             case 4: if(e->retval!=0xdeadbeef12345678ULL || e->retval_hi!=0xdeadbeef12345679ULL) failed=1; break;
-            case 5: if(e->retval!=920) failed=1; break;
+            case 5: if(e->retval!=109891) failed=1; break;
             case 6: if(e->retval!=1+e->args[0]*(e->args[0]+1)/2) failed=1; break;
             case 7: if(e->retval!=e->args[0]+42) failed=1; break;
             case 8: if(e->retval!=0xfedcba9876543210ULL) failed=1; break;
@@ -153,23 +158,28 @@ static int ring_full(void)
     if(s==MAP_FAILED) return 1;
     pid_t pid=fork();
     if(pid==0) {
-        while(!atomic_load(&s->go)) ludp_cpu_relax();
+        atomic_store(&s->ready,1);
+        while(!atomic_load(&s->go)) validation_cpu_relax();
         for(u64 i=0;i<1000;i++) if(six(i,2,3,4,5,6)!=i+182) atomic_fetch_add(&s->errors,1);
         atomic_store(&s->done,1);
-        while(atomic_load(&s->go)!=2) ludp_cpu_relax();
+        while(atomic_load(&s->go)!=2) validation_cpu_relax();
         if(six(1000,2,3,4,5,6)!=1182) atomic_fetch_add(&s->errors,1);
         atomic_store(&s->done,2);
-        while(!atomic_load(&s->release)) ludp_cpu_relax();
+        while(!atomic_load(&s->release)) validation_cpu_relax();
         _exit(0);
     }
     if(pid<0) return 1;
-    ludp_ctx *ctx=ludp_attach(pid);
+    ludp_ctx *ctx=NULL;
+    double ready_deadline=now()+2;
+    while(!atomic_load(&s->ready) && now()<ready_deadline) usleep(100);
+    if(!atomic_load(&s->ready)) { failed=1; goto cleanup; }
+    ctx=ludp_attach(pid);
     if(!ctx) { failed=1; goto cleanup; }
     /* Test-only capacity reduction; the allocated mapping remains unchanged. */
     ctx->ring_cap=16; ctx->ring_mask=15;
     if(ludp_mem_write(ctx,ctx->ring_addr+RO_CAP,&ctx->ring_cap,8) ||
        ludp_mem_write(ctx,ctx->ring_addr+RO_MASK,&ctx->ring_mask,8) ||
-       ludp_probe_add_ex(ctx,"libtest.so","six",3,&id)) { failed=1; goto cleanup; }
+       ludp_probe_add_ex(ctx,"libprobe_targets.so","six",3,&id)) { failed=1; goto cleanup; }
     atomic_store(&s->go,1); ludp_resume(ctx);
     double deadline=now()+10;
     while(atomic_load(&s->done)!=1 && now()<deadline) { ludp_poll(ctx); usleep(100); }
@@ -194,13 +204,35 @@ cleanup:
     printf("ring overflow/recovery %s\n",failed?"FAIL":"PASS");
     return failed;
 }
-int main(void)
+static int attach_churn(void)
 {
-    int failed = run(LUDP_PROBE_ENTRY, 0) |
-                 run(LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, 0) | ring_full();
-#if !LUDP_ARM64
-    failed |= run(LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, 1);
-#endif
+    int failed=0;
+    for(int round=0;round<16 && !failed;round++) {
+        int status=0;
+        shared *state=mmap(NULL,sizeof *state,PROT_READ|PROT_WRITE,
+                           MAP_SHARED|MAP_ANONYMOUS,-1,0);
+        if(state==MAP_FAILED) { failed=1; break; }
+        pid_t pid=fork();
+        if(pid==0) {
+            atomic_store(&state->ready,1);
+            while(!atomic_load(&state->release)) validation_cpu_relax();
+            _exit(0);
+        }
+        if(pid<0) { munmap(state,sizeof *state); failed=1; break; }
+
+        double deadline=now()+2;
+        while(!atomic_load(&state->ready) && now()<deadline) usleep(100);
+        ludp_ctx *ctx=NULL;
+        if(!atomic_load(&state->ready) || !(ctx=ludp_attach(pid)) || ludp_detach(ctx))
+            failed=1;
+        if(failed) kill(pid,SIGKILL); else atomic_store(&state->release,1);
+        waitpid(pid,&status,0);
+        if(!WIFEXITED(status)||WEXITSTATUS(status)) failed=1;
+        munmap(state,sizeof *state);
+    }
+    printf("attach/detach churn %s\n",failed?"FAIL":"PASS");
     return failed;
 }
+int main(void) { return run(LUDP_PROBE_ENTRY,0) | run(LUDP_PROBE_ENTRY|LUDP_PROBE_RETURN,0) |
+                       run(LUDP_PROBE_ENTRY|LUDP_PROBE_RETURN,1) | ring_full() | attach_churn(); }
 #endif

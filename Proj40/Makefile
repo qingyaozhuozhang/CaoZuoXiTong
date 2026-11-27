@@ -1,48 +1,66 @@
-# 轻量级用户态动态探针：只构建 F1–F3 所需的核心库与验证程序
+# 轻量级用户态动态探针：双架构核心库、验证、演示和性能程序
 CC       ?= gcc
 AR       ?= ar
 CFLAGS   ?= -O2 -g -Wall -Wextra -fno-strict-aliasing -pthread
 LDFLAGS  ?= -pthread
 
-TARGET := $(shell $(CC) -dumpmachine)
-ifeq ($(findstring aarch64,$(TARGET)),aarch64)
-ARCH_OBJS = arm64.o trampoline_arm64.o
-ABI_TEST = test_abi_arm64.S
-else ifeq ($(findstring x86_64,$(TARGET)),x86_64)
+TARGET_MACHINE := $(shell $(CC) -dumpmachine)
+ifneq (,$(findstring aarch64,$(TARGET_MACHINE)))
+ARCH_OBJS = aarch64.o aarch64_trampoline.o
+ABI_SENTINEL = abi_state_aarch64.S
+VECTOR_SENTINEL = simd_state_aarch64.S
+else ifneq (,$(findstring x86_64,$(TARGET_MACHINE)))
 ARCH_OBJS = x86dec.o trampoline.o
-ABI_TEST = test_abi.S
-DECODER_TEST = test_decode
+ABI_SENTINEL = abi_state_sentinel.S
+VECTOR_SENTINEL = avx_state_sentinel.S
 else
-$(error Unsupported compiler target: $(TARGET))
+$(error Unsupported compiler target: $(TARGET_MACHINE); expected x86_64 or aarch64)
 endif
-LIB_OBJS = ludp.o probes.o elf.o $(ARCH_OBJS)
-TEST_BINS = $(DECODER_TEST) test_f123 test_f45 test_thread_state bench_f123 demo_f123
 
-.PHONY: all test benchmark clean
-all: libludp.a libtest.so $(TEST_BINS)
+LIB_OBJS = ludp.o probes.o elf.o $(ARCH_OBJS)
+VALIDATION_BINS = instruction_validation probe_abi_validation probe_lifecycle_validation multiprobe_validation probe_extensions_validation callback_validation thread_signal_validation api_contract_validation
+DEMO_BINS = probe_demo
+BENCHMARK_BINS = getpid_benchmark
+PROGRAMS = $(VALIDATION_BINS) $(DEMO_BINS) $(BENCHMARK_BINS)
+
+.PHONY: all check test demo demo-full benchmark clean
+all: libludp.a libprobe_targets.so $(PROGRAMS)
 
 libludp.a: $(LIB_OBJS)
+	rm -f $@
 	$(AR) rcs $@ $^
 
-libtest.so: testlib.c
+libprobe_targets.so: probe_targets.c
 	$(CC) $(CFLAGS) -fno-optimize-sibling-calls -fpatchable-function-entry=8 -shared -fPIC -o $@ $<
 
-test_decode: test_decode.c libludp.a
+instruction_validation: instruction_validation.c libludp.a
 	$(CC) $(CFLAGS) -o $@ $< libludp.a $(LDFLAGS)
 
-test_f123: test_f123.c $(ABI_TEST) libtest.so libludp.a
-	$(CC) $(CFLAGS) -rdynamic -o $@ test_f123.c $(ABI_TEST) libludp.a -ldl -L. -ltest -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
+probe_abi_validation: probe_abi_validation.c $(ABI_SENTINEL) libprobe_targets.so libludp.a
+	$(CC) $(CFLAGS) -rdynamic -o $@ probe_abi_validation.c $(ABI_SENTINEL) libludp.a -ldl -L. -lprobe_targets -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
 
-test_f45: test_f45.c libludp.a
+probe_lifecycle_validation: probe_lifecycle_validation.c libludp.a
 	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -o $@ $< libludp.a $(LDFLAGS)
 
-test_thread_state: test_thread_state.c libludp.a
+multiprobe_validation: multiprobe_validation.c libludp.a
+	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ $< libludp.a $(LDFLAGS)
+
+probe_extensions_validation: probe_extensions_validation.c libludp.a
+	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ $< libludp.a $(LDFLAGS)
+
+callback_validation: callback_validation.c $(VECTOR_SENTINEL) libludp.a
+	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ callback_validation.c $(VECTOR_SENTINEL) libludp.a $(LDFLAGS)
+
+thread_signal_validation: thread_signal_validation.c libludp.a
 	$(CC) $(CFLAGS) -rdynamic -o $@ $< libludp.a -ldl $(LDFLAGS)
 
-demo_f123: demo_f123.c libtest.so libludp.a
-	$(CC) $(CFLAGS) -o $@ demo_f123.c libludp.a -ldl -L. -ltest -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
+api_contract_validation: api_contract_validation.c libludp.a
+	$(CC) $(CFLAGS) -rdynamic -fpatchable-function-entry=8 -o $@ $< libludp.a $(LDFLAGS)
 
-bench_f123: bench_f123.c libludp.a
+probe_demo: probe_demo.c libprobe_targets.so libludp.a
+	$(CC) $(CFLAGS) -o $@ probe_demo.c libludp.a -ldl -L. -lprobe_targets -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
+
+getpid_benchmark: getpid_benchmark.c libludp.a
 	$(CC) $(CFLAGS) -fno-builtin -o $@ $< libludp.a -ldl $(LDFLAGS)
 
 %.o: %.c ludp.h ludp_internal.h
@@ -51,18 +69,30 @@ bench_f123: bench_f123.c libludp.a
 %.o: %.S
 	$(CC) -c -o $@ $<
 
-test: all
-ifneq ($(DECODER_TEST),)
-	./$(DECODER_TEST)
-endif
-	./test_f123
-	./test_f45
-	./test_thread_state
-	./demo_f123
+$(PROGRAMS): validation_arch.h
+
+check: all
+	./instruction_validation
+	./probe_abi_validation
+	./probe_lifecycle_validation
+	./multiprobe_validation
+	./probe_extensions_validation
+	./callback_validation
+	./thread_signal_validation
+	./api_contract_validation
+	./probe_demo
+
+# Keep the conventional target as an alias for existing automation.
+test: check
 
 benchmark: all
-	python3 benchmark.py --rounds 5 --output reports
+	python3 benchmark.py --rounds 5
+
+demo:
+	python3 ../scripts/run_demo.py
+
+demo-full:
+	python3 ../scripts/run_demo.py --full
 
 clean:
-	rm -f $(LIB_OBJS) x86dec.o trampoline.o arm64.o trampoline_arm64.o \
-		libludp.a libtest.so test_decode $(TEST_BINS)
+	rm -f ludp.o probes.o elf.o x86dec.o trampoline.o aarch64.o aarch64_trampoline.o libludp.a libprobe_targets.so $(PROGRAMS)

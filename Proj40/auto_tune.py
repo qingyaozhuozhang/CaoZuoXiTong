@@ -16,14 +16,14 @@ def main():
     parser = argparse.ArgumentParser(description="F1–F3 自动参数调优：批量远程内存复制")
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument("--iterations", type=int, default=1_000_000)
-    parser.add_argument("--output", type=Path, default=Path("reports"))
+    parser.add_argument("--output", type=Path, default=ROOT.parent / "artifacts" / "tuning")
     parser.add_argument("--apply", action="store_true", help="将推荐值写入本地 .ludp_tuning.env")
     args = parser.parse_args()
     if args.rounds < 2 or not 1 <= args.iterations <= 2_000_000:
         parser.error("rounds >= 2 且 iterations 在 1..2000000 范围内")
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    if subprocess.call(["make", "-j4"], cwd=ROOT) or subprocess.call(["make", "test"], cwd=ROOT):
+    if subprocess.call(["make", "-j4"], cwd=ROOT) or subprocess.call(["make", "check"], cwd=ROOT):
         print("正确性回归未通过，停止性能调优", file=sys.stderr)
         return 1
     results = {}

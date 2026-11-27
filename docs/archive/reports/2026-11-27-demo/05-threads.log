@@ -1,0 +1,11 @@
+started: 2026-11-27T12:05:48+08:00
+cwd: /home/chairman/github/git_me_coding/CaoZuoXiTong/Proj40
+command: ./test_thread_state
+
+multithread active leader: PASS
+multithread futex-blocked leader: PASS
+signal delivery across quiesce: PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.093

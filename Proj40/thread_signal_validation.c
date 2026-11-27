@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 /* 回归测试：对已经运行的多线程进程附加，覆盖阻塞 futex 的主线程。 */
 #include "ludp_internal.h"
+#include "validation_arch.h"
 #include <dlfcn.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -12,8 +13,11 @@
 #include <unistd.h>
 #include <signal.h>
 
-enum { NTHREADS = 4, NCALLS = 1000 };
-typedef struct { atomic_int ready, go, completed, joined, release, errors; } state_t;
+enum { NTHREADS = 4, NCALLS = 1000, NSIGNALS = 64 };
+typedef struct {
+    atomic_int ready, go, completed, joined, release, errors;
+    volatile sig_atomic_t signals;
+} state_t;
 static state_t *state;
 static uint64_t now_ms(void) {
     struct timespec t;
@@ -23,12 +27,16 @@ static uint64_t now_ms(void) {
 static void *worker(void *arg) {
     (void)arg;
     atomic_fetch_add(&state->ready, 1);
-    while (!atomic_load(&state->go)) ludp_cpu_relax();
+    while (!atomic_load(&state->go)) validation_cpu_relax();
     pid_t expected = getpid();
     for (int i = 1; i < NCALLS; ++i)
         if (getpid() != expected) atomic_fetch_add(&state->errors, 1);
     atomic_fetch_add(&state->completed, 1);
     return NULL;
+}
+static void signal_handler(int sig) {
+    (void)sig;
+    state->signals++;
 }
 static int run_case(int leader_in_futex) {
     int failed = 0, status = 0;
@@ -44,10 +52,10 @@ static int run_case(int leader_in_futex) {
         /* 第二种场景：主线程在 pthread_join/futex 中阻塞。 */
         if (!leader_in_futex)
             while (atomic_load(&state->completed) != NTHREADS)
-                ludp_cpu_relax();
+                validation_cpu_relax();
         for (int i = 0; i < NTHREADS; ++i) pthread_join(threads[i], NULL);
         atomic_store(&state->joined, 1);
-        while (!atomic_load(&state->release)) ludp_cpu_relax();
+        while (!atomic_load(&state->release)) validation_cpu_relax();
         _exit(atomic_load(&state->errors) != 0);
     }
     uint64_t deadline = now_ms() + 10000;
@@ -113,4 +121,52 @@ cleanup:
            failed ? "FAIL" : "PASS");
     return failed;
 }
-int main(void) { return run_case(0) | run_case(1); }
+
+/* A signal-delivery stop racing with quiesce() must be forwarded by the next
+ * resume(), not mistaken for the synthetic PTRACE_INTERRUPT stop. */
+static int run_signal_case(void) {
+    int failed = 0, status = 0;
+    state = mmap(NULL, sizeof(*state), PROT_READ | PROT_WRITE,
+                 MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (state == MAP_FAILED) return 1;
+    pid_t pid = fork();
+    if (pid < 0) { munmap(state, sizeof(*state)); return 1; }
+    if (pid == 0) {
+        struct sigaction sa = {0};
+        sa.sa_handler = signal_handler;
+        sigemptyset(&sa.sa_mask);
+        if (sigaction(SIGUSR2, &sa, NULL)) _exit(2);
+        atomic_store(&state->ready, 1);
+        while (!atomic_load(&state->release)) validation_cpu_relax();
+        _exit(state->signals == NSIGNALS ? 0 : 3);
+    }
+    uint64_t deadline = now_ms() + 3000;
+    while (!atomic_load(&state->ready) && now_ms() < deadline) usleep(100);
+    if (!atomic_load(&state->ready)) { failed = 1; goto cleanup; }
+    ludp_ctx *ctx = ludp_attach(pid);
+    if (!ctx) { failed = 1; goto cleanup; }
+    if (ludp_resume(ctx)) failed = 1;
+    for (int i = 0; !failed && i < NSIGNALS; ++i) {
+        if (kill(pid, SIGUSR2) || ludp_quiesce(ctx) || ludp_resume(ctx)) {
+            failed = 1;
+            break;
+        }
+        deadline = now_ms() + 1000;
+        while (state->signals != i + 1 && now_ms() < deadline) {
+            if (ludp_poll(ctx) < 0) { failed = 1; break; }
+            usleep(100);
+        }
+        if (state->signals != i + 1) failed = 1;
+    }
+    if (ludp_detach(ctx)) failed = 1;
+cleanup:
+    if (failed) kill(pid, SIGKILL);
+    else atomic_store(&state->release, 1);
+    waitpid(pid, &status, 0);
+    if (!failed && (!WIFEXITED(status) || WEXITSTATUS(status))) failed = 1;
+    munmap(state, sizeof(*state));
+    printf("signal delivery across quiesce: %s\n", failed ? "FAIL" : "PASS");
+    return failed;
+}
+
+int main(void) { return run_case(0) | run_case(1) | run_signal_case(); }

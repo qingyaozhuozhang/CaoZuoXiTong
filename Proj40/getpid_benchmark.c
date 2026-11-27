@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
-#include "ludp_internal.h"
+#include "ludp.h"
+#include "validation_arch.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -57,12 +58,12 @@ static int run(const char *mode, long iters, int round)
     if(pid==0) {
         for(int i=0;i<10000;i++) (void)getpid();
         atomic_store(&s->ready,1);
-        while(!atomic_load(&s->go)) ludp_cpu_relax();
+        while(!atomic_load(&s->go)) validation_cpu_relax();
         uint64_t sum=0,start=ns_now();
         for(long i=0;i<iters;i++) sum+=(unsigned)getpid();
         s->ns=ns_now()-start; s->sum=sum;
         atomic_store(&s->done,1);
-        while(!atomic_load(&s->release)) ludp_cpu_relax();
+        while(!atomic_load(&s->release)) validation_cpu_relax();
         _exit(0);
     }
     if(pid<0) { munmap(s,sizeof *s); return 1; }
@@ -95,7 +96,7 @@ static int run(const char *mode, long iters, int round)
             start=ns_now();
             if(ludp_probe_add_ex(ctx,"libc.so.6","getpid",flags,&id)) { failed=1; goto cleanup; }
             add_ns=ns_now()-start;
-            if(ludp_mem_read(ctx,gp,observed,5) || observed[0]!=0xe9) { failed=1; goto cleanup; }
+            if(ludp_mem_read(ctx,gp,observed,VALIDATION_ENTRY_READ_SIZE) || !validation_entry_is_branch(observed)) { failed=1; goto cleanup; }
         }
         ludp_resume(ctx);
     }

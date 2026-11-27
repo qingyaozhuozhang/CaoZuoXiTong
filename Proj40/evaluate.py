@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""F1–F3 中文评测入口：构建、正确性测试、量化基准、可选版本对照。"""
+"""F1–F7 正确性门禁、F1/F3 量化基准和可选版本对照。"""
 import argparse
 import json
 from pathlib import Path
@@ -52,15 +52,16 @@ def write_compare(before, after, filename):
               f"- 优化前正确性：{'通过' if before.get('correctness') else '未通过'}；性能阈值：{'达标' if before.get('performance') else '未达标'}。",
               f"- 优化后正确性：{'通过' if after.get('correctness') else '未通过'}；性能阈值：{'达标' if after.get('performance') else '未达标'}。",
               "- 内核 uprobe 如果显示 SKIP，则没有取得对比结果，不能补写参考数值。",
-              "- 未包含 F4 的完整清理认证、F5–F7 功能验收和 ARM64。", ""]
+              "- 正确性门禁包含 F1–F7；性能数据仍只量化 F1 入口和 F3 返回路径。",
+              "- 当前版本不包含 ARM64。", ""]
     filename.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="构建并自动测试 F1–F3")
+    parser = argparse.ArgumentParser(description="运行 F1–F7 正确性测试和 F1/F3 性能基准")
     parser.add_argument("--rounds", type=int, default=5, help="每种模式重复轮数")
     parser.add_argument("--iterations", type=int, default=1_000_000, help="单轮调用数")
-    parser.add_argument("--output", type=Path, default=Path("reports"))
+    parser.add_argument("--output", type=Path, default=ROOT.parent / "artifacts" / "validation")
     parser.add_argument("--baseline-json", type=Path, help="优化前 benchmark.json，用于生成版本对照")
     parser.add_argument("--require-kernel", action="store_true", help="内核 uprobe 不允许跳过")
     args = parser.parse_args()
@@ -68,7 +69,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     try:
         run_cmd(["make", "-j4"])
-        run_cmd(["make", "test"], output / "tests.log")
+        run_cmd(["make", "check"], output / "tests.log")
         cmd = [sys.executable, "benchmark.py", "--rounds", str(args.rounds),
                "--iterations", str(args.iterations), "--output", str(output)]
         if args.require_kernel:
@@ -80,7 +81,7 @@ def main():
         if args.baseline_json:
             previous = json.loads(args.baseline_json.read_text(encoding="utf-8"))
             write_compare(previous, optimized, output / "对照分析.md")
-        print("评测完成：F1–F3 测试通过，性能阈值达标。")
+        print("评测完成：F1–F7 正确性测试通过，F1/F3 性能阈值达标。")
         return 0
     except (RuntimeError, OSError, ValueError, KeyError) as exc:
         print(f"评测失败：{exc}", file=sys.stderr)

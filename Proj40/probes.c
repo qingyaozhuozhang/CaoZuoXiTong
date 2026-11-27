@@ -316,6 +316,12 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         addr += 4;
 #endif
     int existing = head_of(c, addr);
+    if (existing >= 0 && probe_code_idle(c, NULL)) {
+        int err = errno;
+        if (!was_stopped) resume(c);
+        errno = err;
+        return -1;
+    }
     if (existing >= 0 && ((flags | c->probes[existing].flags) & LUDP_PROBE_RETURN)) {
         errno = ENOTSUP; if (!was_stopped) resume(c);
         return -1;
@@ -431,11 +437,21 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
                                        p->orig, p->orig_len);
     if (publish_rc != 0) {
         fprintf(stderr, "[probe] rebuild fail sym=%s\n", sym);
+        int error = errno ? errno : EIO;
         c->nprobes = previous_count;
         p->used = 0;
-        if (h >= 0) { c->probes[h].chain_prev = -1; rebuild_addr(c, addr); }
-        else write_patch(c, addr, 0, p->orig, p->orig_len);
+        if (h >= 0) c->probes[h].chain_prev = -1;
+        int restore = h >= 0 ? rebuild_addr(c, addr) :
+                              write_patch(c, addr, 0, p->orig, p->orig_len);
+        if (restore) {
+            /* No committed ID represents this failed installation. Keep the
+             * tracee stopped rather than expose a possibly partial patch. */
+            c->unsafe_state = true;
+            errno = EIO;
+            return -1;
+        }
         if (!was_stopped) resume(c);
+        errno = error;
         return -1;
     }
 
@@ -456,12 +472,30 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     return 0;
 }
 
+static int rebuild_probe_template(ludp_ctx *c, const probe_t *p)
+{
+    const tramp_layout_t *layout = tramp_layout();
+    uint8_t relocated[32];
+    fill_nops(relocated, sizeof relocated);
+    if (relocate_orig(p->orig, p->orig_len, p->addr,
+                      p->tramp + layout->reloc_off,
+                      relocated, sizeof relocated) < 0)
+        return -1;
+    return tramp_build(c, p->tramp, p->id, c->ring_addr,
+                       p->addr + p->orig_len, relocated, sizeof relocated,
+                       p->flags, &p->filter, &p->call);
+}
+
 /* Commit the registry change only after the existing patch operation succeeds.
  * A failed rollback leaves the target stopped for a retry. */
 static int switch_stopped(ludp_ctx *c, probe_t *p, bool enable)
 {
     bool previous = p->enabled;
     if (previous == enable && !p->needs_rebuild) return 0;
+    if (p->needs_rebuild && rebuild_probe_template(c, p)) {
+        errno = EIO;
+        return -1;
+    }
     p->enabled = enable;
     if (!rebuild_addr(c, p->addr)) {
         p->needs_rebuild = false;
@@ -521,7 +555,8 @@ int probe_set_enabled(ludp_ctx *c, u64 id, bool en)
     if (p->enabled == en && !p->needs_rebuild) return 0;
     bool running = !c->stopped;
     if (quiesce(c)) return -1;
-    int rc = switch_stopped(c, p, en);
+    int rc = probe_code_idle(c, NULL);
+    if (!rc) rc = switch_stopped(c, p, en);
     if (!rc) {
         p->generation++;
         if (!p->generation) p->generation = 1;
@@ -557,9 +592,10 @@ int probe_update_internal(ludp_ctx *c, u64 id,
         errno = EBUSY;
         return -1;
     }
-    if (p->flags == next.flags && p->enabled == next.enabled &&
-        memcmp(&p->filter, &next.filter, sizeof p->filter) == 0 &&
-        memcmp(&p->call, &next.call, sizeof p->call) == 0)
+    bool unchanged = p->flags == next.flags && p->enabled == next.enabled &&
+                     memcmp(&p->filter, &next.filter, sizeof p->filter) == 0 &&
+                     memcmp(&p->call, &next.call, sizeof p->call) == 0;
+    if (unchanged && !p->needs_rebuild)
         return 0;
 
     bool running = !c->stopped;
@@ -574,7 +610,7 @@ int probe_update_internal(ludp_ctx *c, u64 id,
         saved_errno = errno;
         goto finish;
     }
-    if (probe_callback_idle(c, p)) {
+    if (probe_code_idle(c, NULL) || probe_callback_idle(c, p)) {
         saved_errno = errno;
         goto finish;
     }
@@ -614,23 +650,16 @@ int probe_update_internal(ludp_ctx *c, u64 id,
     p->enabled = next.enabled;
     p->filter = next.filter;
     p->call = next.call;
-    p->generation++;
-    if (!p->generation) p->generation = 1;
+    if (!unchanged && ++p->generation == 0) p->generation = 1;
 
-    uint8_t reloc[32];
-    fill_nops(reloc, sizeof reloc);
-    if (relocate_orig(p->orig, p->orig_len, p->addr,
-                      p->tramp + tl->reloc_off, reloc, sizeof reloc) < 0 ||
-        tramp_build(c, p->tramp, p->id, c->ring_addr,
-                    p->addr + p->orig_len, reloc, sizeof reloc,
-                    p->flags, &p->filter, &p->call) ||
-        rebuild_addr(c, p->addr)) {
+    if (rebuild_probe_template(c, p) || rebuild_addr(c, p->addr)) {
         saved_errno = errno ? errno : EIO;
         *p = previous;
         int restore_code = mem_write(c, p->tramp, backup,
                                      (size_t)tl->total_size);
         int restore_chain = rebuild_addr(c, p->addr);
-        p->needs_rebuild = restore_code != 0 || restore_chain != 0;
+        p->needs_rebuild = previous.needs_rebuild || restore_code != 0 ||
+                           restore_chain != 0;
         if (p->needs_rebuild)
             saved_errno = EIO;
         goto finish;

@@ -124,7 +124,11 @@ struct ludp_ctx {
     u64 overflow;           /* cumulative dropped-event counter (tracer-side) */
     u64 clock_tsc_anchor;
     u64 clock_mono_anchor;
+#if defined(__aarch64__)
+    uint32_t counter_frequency;
+#else
     long double clock_ns_per_tsc;
+#endif
     bool clock_ready;
 
     uintptr_t exec_base;    /* injected RWX trampoline pool (near shared libs) */
@@ -203,6 +207,7 @@ int  probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
                         const ludp_filter *filter,
                         const ludp_call_action *call, u64 *id_out);
 int return_slots_init(ludp_ctx *c);
+int probe_code_idle(ludp_ctx *c, bool *has_user_thread);
 int probe_storage_idle(ludp_ctx *c);
 int release_idle_storage(ludp_ctx *c, bool closing);
 int  probe_remove_internal(ludp_ctx *c, u64 id);

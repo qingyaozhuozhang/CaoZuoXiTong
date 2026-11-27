@@ -80,8 +80,12 @@ int main(int argc, char **argv)
     uint64_t deadline = now_ns() + UINT64_C(10000000000);
     while (!atomic_load(&ctl->ready) && now_ns() < deadline) usleep(100);
     if (!atomic_load(&ctl->ready)) { failed = 1; goto cleanup; }
+    char object[PATH_MAX];
+    if (validation_symbol_object(dlsym(RTLD_DEFAULT, "getpid"), object)) {
+        perror("resolve getpid object"); failed = 1; goto cleanup;
+    }
     ctx = ludp_attach(child);
-    if (!ctx || ludp_probe_add_ex(ctx, "libc.so", "getpid",
+    if (!ctx || ludp_probe_add_ex(ctx, object, "getpid",
             LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, &id) ||
         ludp_probe_list(ctx, &info, 1) != 1 || ludp_resume(ctx)) {
         perror("attach/install"); failed = 1; goto cleanup;

@@ -46,7 +46,7 @@ multiprobe_validation: multiprobe_validation.c libludp.a
 	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ $< libludp.a $(LDFLAGS)
 
 probe_extensions_validation: probe_extensions_validation.c libludp.a
-	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ $< libludp.a $(LDFLAGS)
+	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ $< libludp.a $(LDFLAGS) -Wl,--wrap=mem_write
 
 callback_validation: callback_validation.c $(VECTOR_SENTINEL) libludp.a
 	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ callback_validation.c $(VECTOR_SENTINEL) libludp.a $(LDFLAGS)

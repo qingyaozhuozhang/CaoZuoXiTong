@@ -1,7 +1,11 @@
 #ifndef LUDP_VALIDATION_ARCH_H
 #define LUDP_VALIDATION_ARCH_H
 
+#include <dlfcn.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -22,6 +26,18 @@
 #else
 #error "Validation supports Linux x86_64 and AArch64"
 #endif
+
+/* These checks trace a forked child with the same libc mapping. Keep the
+ * symbol-based install path and use the actual object name on each libc. */
+static inline int validation_symbol_object(const void *address, char path[PATH_MAX])
+{
+    Dl_info object;
+    if (!address || !dladdr(address, &object) || !object.dli_fname) {
+        errno = ENOENT;
+        return -1;
+    }
+    return realpath(object.dli_fname, path) ? 0 : -1;
+}
 
 static inline void validation_cpu_relax(void)
 {

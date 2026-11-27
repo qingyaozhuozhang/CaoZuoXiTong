@@ -524,6 +524,12 @@ static int resume_known_stops(ludp_ctx *c)
         errno = EIO;
         return -1;
     }
+    for (int i = 0; i < c->nprobes; ++i) {
+        if (c->probes[i].used && c->probes[i].needs_rebuild) {
+            errno = EIO;
+            return -1;
+        }
+    }
     int rc = 0;
     for (int i = 0; i < c->nthreads;) {
         if (!c->seized[i] || !c->thread_stopped[i]) {
@@ -547,6 +553,20 @@ static int resume_known_stops(ludp_ctx *c)
     }
     c->stopped = all_threads_stopped(c);
     return rc;
+}
+
+/* A tracer can be embedded in an application with unrelated children or
+ * multiple sessions. Only consume wait statuses owned by this context. */
+static pid_t wait_traced(const ludp_ctx *c, int *status)
+{
+    for (int i = 0; i < c->nthreads; ++i) {
+        if (!c->seized[i]) continue;
+        pid_t tid = waitpid(c->tids[i], status, __WALL | WNOHANG);
+        if (tid > 0) return tid;
+        if (tid < 0 && errno != ECHILD && errno != ESRCH && errno != EINTR)
+            return -1;
+    }
+    return 0;
 }
 
 int quiesce(ludp_ctx *c)
@@ -610,7 +630,7 @@ int quiesce(ludp_ctx *c)
             break;
         }
         int st;
-        pid_t w = waitpid(-1, &st, __WALL | WNOHANG);
+        pid_t w = wait_traced(c, &st);
         if (w > 0) {
             if (WIFSTOPPED(st)) {
                 int wi = tid_index(c, w);
@@ -640,7 +660,7 @@ int quiesce(ludp_ctx *c)
                             bool tracked = false;
                             for (int k = 0; k < remain; ++k)
                                 if (pending[k] == (pid_t)nt) tracked = true;
-                            if (!tracked)
+                            if (!tracked && !c->thread_stopped[ni])
                                 pending[remain++] = (pid_t)nt;
                         }
                     }
@@ -734,8 +754,10 @@ int ludp_poll(ludp_ctx *c)
         return 0;
     for (;;) {
         int st;
-        pid_t w = waitpid(-1, &st, __WALL | WNOHANG);
-        if (w <= 0)
+        pid_t w = wait_traced(c, &st);
+        if (w < 0)
+            return -1;
+        if (w == 0)
             break;
         n++;
 
@@ -757,10 +779,9 @@ int ludp_poll(ludp_ctx *c)
             unsigned long nt = 0;
             if (ptrace(PTRACE_GETEVENTMSG, w, 0, &nt) == 0 && nt > 0) {
                 int ni = add_thread(c, (pid_t)nt);
-                if (ni >= 0) {
-                    c->seized[ni] = true;   /* attached via TRACECLONE */
-                    c->thread_stopped[ni] = false; /* own stop not reaped yet */
-                }
+                if (ni < 0)
+                    return -1;
+                c->seized[ni] = true;   /* attached via TRACECLONE */
             }
         }
 
@@ -779,7 +800,10 @@ int ludp_poll(ludp_ctx *c)
         if (wi >= 0)
             c->thread_stopped[wi] = false;
     }
-    return c->nthreads > 0 ? n : -1;
+    if (c->nthreads > 0)
+        return n;
+    errno = ESRCH;
+    return -1;
 }
 
 /* ============================ remote syscalls ============================ */
@@ -1206,14 +1230,14 @@ int release_idle_storage(ludp_ctx *c, bool closing)
 
 /* The caller also coordinates a safe point with the application: a signal
  * handler could otherwise conceal a trampoline PC in a saved signal frame. */
-int probe_storage_idle(ludp_ctx *c)
+int probe_code_idle(ludp_ctx *c, bool *has_user_thread)
 {
-    bool has_user_thread = false;
+    if (has_user_thread) *has_user_thread = false;
     for (int i = 0; i < c->nthreads; ++i) {
         trace_regs regs;
         if (!c->seized[i]) continue;
         if (trace_regs_get(c->tids[i], &regs)) return -1;
-        if (trace_regs_in_user(&regs)) has_user_thread = true;
+        if (has_user_thread && trace_regs_in_user(&regs)) *has_user_thread = true;
         uintptr_t pc = trace_regs_pc(&regs);
         for (owned_mapping *m = c->mappings; m; m = m->next) {
             if (m->executable && pc >= m->base && pc - m->base < m->size) {
@@ -1222,6 +1246,13 @@ int probe_storage_idle(ludp_ctx *c)
             }
         }
     }
+    return 0;
+}
+
+int probe_storage_idle(ludp_ctx *c)
+{
+    bool has_user_thread;
+    if (probe_code_idle(c, &has_user_thread)) return -1;
     for (int i = 0; i < c->nprobes; ++i) {
         if (c->probes[i].used && probe_callback_idle(c, &c->probes[i]))
             return -1;
@@ -1631,7 +1662,7 @@ static int calibrate_monotonic_clock(ludp_ctx *c)
         errno = EIO;
         return -1;
     }
-    c->clock_ns_per_tsc = 1000000000.0L / (long double)frequency;
+    c->counter_frequency = (uint32_t)frequency;
 #else
     u64 tsc0, ns0, tsc1, ns1;
     if (clock_sample(&tsc0, &ns0))
@@ -1655,6 +1686,22 @@ static u64 tsc_to_monotonic_ns(const ludp_ctx *c, u64 tsc)
 {
     if (!c->clock_ready)
         return 0;
+#if defined(__aarch64__)
+    /* CNTFRQ_EL0 is 32-bit. The subsecond product fits in 64 bits. Round
+     * absolute timestamps to nearest nanosecond, with ties toward +infinity. */
+    const u64 ns_per_second = UINT64_C(1000000000);
+    const u64 frequency = c->counter_frequency;
+    const bool before_anchor = tsc < c->clock_tsc_anchor;
+    const u64 ticks = before_anchor ? c->clock_tsc_anchor - tsc :
+                                     tsc - c->clock_tsc_anchor;
+    const u64 round = (frequency - before_anchor) / 2;
+    const u64 ns = (ticks % frequency * ns_per_second + round) / frequency;
+    const __uint128_t elapsed = (__uint128_t)(ticks / frequency) * ns_per_second + ns;
+    if (before_anchor)
+        return elapsed >= c->clock_mono_anchor ? 0 : c->clock_mono_anchor - (u64)elapsed;
+    return elapsed >= UINT64_MAX - c->clock_mono_anchor ?
+           UINT64_MAX : c->clock_mono_anchor + (u64)elapsed;
+#else
     long double delta = tsc >= c->clock_tsc_anchor
                             ? (long double)(tsc - c->clock_tsc_anchor)
                             : -(long double)(c->clock_tsc_anchor - tsc);
@@ -1665,6 +1712,7 @@ static u64 tsc_to_monotonic_ns(const ludp_ctx *c, u64 tsc)
     if (value >= (long double)UINT64_MAX)
         return UINT64_MAX;
     return (u64)(value + 0.5L);
+#endif
 }
 
 static u64 kernel_tid_for_fsbase(const ludp_ctx *c, u64 fsbase)
@@ -1739,7 +1787,12 @@ int events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
         }
         consumed += ready;
         count += (int)ready;
+        if (ready < chunk) break;
     }
+
+    /* No slot was released. Leave the remote consumer watermark alone. */
+    if (count == 0)
+        return 0;
 
     /* Publish our watermark so producers can compute overflow accurately. */
     __atomic_thread_fence(__ATOMIC_RELEASE);

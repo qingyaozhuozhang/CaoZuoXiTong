@@ -172,6 +172,7 @@ int ludp_mem_write(ludp_ctx *ctx, uintptr_t addr, const void *buf, size_t len);
 
 /* 线程协调：与后续 F7 有关的兼容接口。修改指令前需在安全点使用。 */
 int ludp_quiesce(ludp_ctx *ctx);
+/* EIO indicates a probe rollback needs repair before the target can resume. */
 int ludp_resume(ludp_ctx *ctx);
 int ludp_thread_count(ludp_ctx *ctx);
 /* 在运行期处理 clone、退出及信号的 ptrace 停止；应周期调用。

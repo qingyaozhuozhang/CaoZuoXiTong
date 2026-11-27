@@ -3,6 +3,7 @@
 #include "ludp_internal.h"
 #include "validation_arch.h"
 #include <dlfcn.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -122,6 +123,33 @@ cleanup:
     return failed;
 }
 
+/* Leave a sibling's exit waitable without consuming it. Neither polling
+ * nor quiescing the traced child may take this application's wait status. */
+static int preserves_unrelated_exit(ludp_ctx *ctx, bool stop_target)
+{
+    pid_t sibling = fork();
+    if (sibling < 0) return -1;
+    if (sibling == 0) _exit(42);
+
+    siginfo_t info = {0};
+    int rc;
+    do {
+        rc = waitid(P_PID, (id_t)sibling, &info, WEXITED | WNOWAIT);
+    } while (rc && errno == EINTR);
+    if (!rc)
+        rc = stop_target ? ludp_quiesce(ctx) : ludp_poll(ctx);
+
+    int status;
+    pid_t reaped;
+    do {
+        reaped = waitpid(sibling, &status, 0);
+    } while (reaped < 0 && errno == EINTR);
+
+    if (stop_target && ludp_resume(ctx)) return -1;
+    return rc < 0 || reaped != sibling || !WIFEXITED(status) ||
+           WEXITSTATUS(status) != 42 ? -1 : 0;
+}
+
 /* A signal-delivery stop racing with quiesce() must be forwarded by the next
  * resume(), not mistaken for the synthetic PTRACE_INTERRUPT stop. */
 static int run_signal_case(void) {
@@ -145,7 +173,13 @@ static int run_signal_case(void) {
     if (!atomic_load(&state->ready)) { failed = 1; goto cleanup; }
     ludp_ctx *ctx = ludp_attach(pid);
     if (!ctx) { failed = 1; goto cleanup; }
-    if (ludp_resume(ctx)) failed = 1;
+    if (ludp_resume(ctx) || preserves_unrelated_exit(ctx, false) ||
+        preserves_unrelated_exit(ctx, true)) {
+        fputs("FAIL: an unrelated child exit was lost\n", stderr);
+        failed = 1;
+    } else {
+        puts("poll/quiesce preserve unrelated child exit: PASS");
+    }
     for (int i = 0; !failed && i < NSIGNALS; ++i) {
         if (kill(pid, SIGUSR2) || ludp_quiesce(ctx) || ludp_resume(ctx)) {
             failed = 1;

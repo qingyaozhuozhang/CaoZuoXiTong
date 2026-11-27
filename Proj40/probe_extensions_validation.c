@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include "ludp.h"
+#include "ludp_internal.h"
 #include "validation_arch.h"
 #include <errno.h>
 #include <signal.h>
@@ -108,6 +108,54 @@ static int get_info(ludp_ctx *ctx, u64 id, ludp_probe_info *info)
     return -1;
 }
 
+/* Fail one relink and then the restore of the old template. The production
+ * tracee writes still happen through __real_mem_write outside these two calls. */
+static uintptr_t fail_relink, fail_restore;
+
+int __real_mem_write(ludp_ctx *ctx, uintptr_t address, const void *buf, size_t len);
+
+int __wrap_mem_write(ludp_ctx *ctx, uintptr_t address, const void *buf, size_t len)
+{
+    if (fail_relink && address == fail_relink) {
+        fail_relink = 0;
+        errno = EIO;
+        return -1;
+    }
+    if (fail_restore && address == fail_restore) {
+        fail_restore = 0;
+        errno = EIO;
+        return -1;
+    }
+    return __real_mem_write(ctx, address, buf, len);
+}
+
+static int check_failed_update(ludp_ctx *ctx, u64 id)
+{
+    ludp_probe_info info;
+    ludp_probe_config original;
+    if (get_info(ctx, id, &info) || ludp_probe_get_config(ctx, id, &original))
+        return -1;
+
+    const tramp_layout_t *layout = tramp_layout();
+    fail_relink = info.trampoline + layout->reloc_off;
+    fail_restore = info.trampoline;
+    ludp_probe_config changed = original;
+    changed.filter.value++;
+    int rc = ludp_probe_update(ctx, id, &changed);
+    int err = errno;
+    bool injected = !fail_relink && !fail_restore;
+    fail_relink = fail_restore = 0;
+
+    if (!injected || rc != -1 || err != EIO ||
+        ludp_resume(ctx) != -1 || errno != EIO)
+        return -1;
+    if (ludp_probe_update(ctx, id, &original) || get_info(ctx, id, &info) ||
+        info.generation != 1 || info.filter.value != original.filter.value)
+        return -1;
+    puts("A5 failed rollback blocks resume and the original config repairs it: PASS");
+    return 0;
+}
+
 int main(void)
 {
     int failed = 0, status = 0;
@@ -152,7 +200,8 @@ int main(void)
     if (ludp_probe_add_addr_filtered_ex(
             ctx, "advanced_target", (uintptr_t)advanced_target,
             LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, &filter, &id) ||
-        ludp_resume(ctx)) {
+        check_failed_update(ctx, id) || ludp_resume(ctx)) {
+        fputs("FAIL: initial install/resume or A5 rollback check\n", stderr);
         failed = 1;
         goto cleanup_ctx;
     }

@@ -117,8 +117,14 @@ static int run(const char *mode, long iters, int round)
         unsigned flags=LUDP_PROBE_ENTRY;
         if(!strcmp(mode,"return")) flags|=LUDP_PROBE_RETURN;
         if(strcmp(mode,"inert")) {
+            char object[PATH_MAX];
+            if (validation_symbol_object((const void *)gp, object)) {
+                perror("resolve getpid object"); failed=1; goto cleanup;
+            }
             start=ns_now();
-            if(ludp_probe_add_ex(ctx,"libc.so.6","getpid",flags,&id)) { failed=1; goto cleanup; }
+            if(ludp_probe_add_ex(ctx,object,"getpid",flags,&id)) {
+                perror("install getpid probe"); failed=1; goto cleanup;
+            }
             add_ns=ns_now()-start;
             if(ludp_mem_read(ctx,gp,observed,VALIDATION_ENTRY_READ_SIZE) || !validation_entry_is_branch(observed)) { failed=1; goto cleanup; }
         }

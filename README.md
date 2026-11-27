@@ -133,7 +133,7 @@ python3 scripts/run_demo.py --full --require-kernel
 
 每次演示在 `artifacts/demo/` 下生成独立目录，包含步骤日志、`summary.json`、`report.md`，完整模式另保存性能样本。F1–F3 直接展示真实入口字节、参数 `[1,2,3,4,5,6]`、整数返回值 `183`、浮点返回值 `4.00` 及事件配对。失败返回非零退出码，跳过项明确为 `SKIP`。
 
-[演示指南](docs/demo.md) 提供运行步骤、输出解释、判定条件和结果复现方法。GitHub 最新结果统一下载到与 `Proj40/` 同级的 `test/`：`python3 scripts/sync_ci_results.py --wait`；下一次同步整体替换旧结果，失败日志同样保留。
+[演示指南](docs/demo.md) 提供运行步骤、输出解释、判定条件和结果复现方法。与 `Proj40/` 同级的 [test 功能包](test/README.md) 负责 GitHub 结果同步：`python3 -m test sync --wait`。最新结果保存在 `test/results/`，下一次同步仅替换该结果目录，包代码和说明保留。
 
 ### 6.3 独立验收与性能口径
 
@@ -165,7 +165,7 @@ python3 Proj40/evaluate.py --rounds 5 --iterations 1000000 \
 
 本轮在本机 x86-64 运行完整回归与五轮百万次基准，功能及入口/返回探针开销、插入/移除门禁通过；内核 uprobe 因权限为 `SKIP`。ARM64 已完成交叉编译和 QEMU 系统环境下的完整功能回归，模拟耗时不作为性能达标依据。原生 ARM64 与双架构 UBSan 由 [GitHub Actions](.github/workflows/ci.yml) 执行，原生结果待推送后取得。
 
-推送后运行 `python3 scripts/sync_ci_results.py --wait`，查看 `test/report.md` 与 `test/latest.json` 中的提交、架构、作业结论及失败日志。只有同一提交的两个原生架构报告齐全，才形成 A1 完整验收证据。
+推送后运行 `python3 -m test sync --wait`，查看 `test/results/report.md` 与 `test/results/latest.json` 中的提交、架构、作业结论及失败日志。只有同一提交的两个原生架构报告齐全，才形成 A1 完整验收证据。
 
 ## 7. 遇到的主要问题和解决方法
 
@@ -203,17 +203,20 @@ python3 Proj40/evaluate.py --rounds 5 --iterations 1000000 \
 │   ├── Makefile              # 构建、测试与演示目标
 │   ├── probe_demo.c            # 真实动态库函数探针演示
 │   └── README.md             # 源码文件职责
-├── scripts/                  # 一键演示与 GitHub 结果同步
-│   ├── run_demo.py
-│   └── sync_ci_results.py
+├── scripts/                  # 本地一键演示
+│   └── run_demo.py
 ├── docs/                     # 需求、设计、接口、测试、限制与演示
 │   └── archive/              # 历史原始报告
-├── test/                     # 最新一轮 GitHub 结果，同步时覆盖旧结果
+├── test/                     # GitHub 结果同步与离线验证功能包
+│   ├── __main__.py           # python3 -m test 命令入口
+│   ├── sync_ci_results.py    # 运行查询、下载与结果替换
+│   ├── ci_results_validation.py # 同步逻辑离线验证
+│   └── results/              # 最新一轮结果，仅此目录在同步后替换
 ├── artifacts/                # 本地生成的演示/评测结果，不纳入版本管理
 └── .github/workflows/ci.yml  # 原生 x86-64 / ARM64 CI 与 UBSan
 ```
 
-正式文档集中于 [docs](docs/README.md)。临时二进制和缓存可重新生成；本地结果写入 `artifacts/`，GitHub 最新结果写入 `test/`；历史快照只在归档目录保留。公共头文件声明 MIT，仓库尚未提供完整的 LICENSE 文件。
+正式文档集中于 [docs](docs/README.md)。临时二进制和缓存可重新生成；本地结果写入 `artifacts/`，GitHub 最新结果写入 `test/results/`；历史快照只在归档目录保留。公共头文件声明 MIT，仓库尚未提供完整的 LICENSE 文件。
 
 ## 10. 比赛收获
 

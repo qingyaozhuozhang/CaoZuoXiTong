@@ -118,8 +118,8 @@ docs/demo.md                 本指南
 scripts/run_demo.py          一键执行、超时处理与证据归档
 Proj40/probe_demo.c           真实事件演示程序
 Proj40/Makefile               demo / demo-full 构建入口
-scripts/sync_ci_results.py    GitHub 最新结果下载与替换
-test/                        与 Proj40 同级，仅保存最新一轮 GitHub 结果
+test/                        与 Proj40 同级的 GitHub 结果同步与离线验证功能包
+test/results/                下载生成，仅保存最新一轮 GitHub 结果
 ```
 
 本地演示使用独立运行目录：
@@ -146,12 +146,12 @@ artifacts/demo/<运行时间>/
 GitHub 结果单独保存。在代码推送并触发 CI 后执行：
 
 ```bash
-python3 scripts/sync_ci_results.py --wait
+python3 -m test sync --wait
 ```
 
-脚本下载当前分支最新一轮结果，成功下载后整体替换根目录 `test/`，只保留当前轮次的 x86-64 / ARM64 full 与 UBSan 结果。`test/report.md` 是汇总入口，`latest.json` 记录提交和作业状态；缺失架构报告不会沿用旧版本。失败运行也保存已有报告与可下载的失败作业日志；下载失败保留原目录。登录方式、目录结构和退出码见 [多架构验证说明](arm64.md)。
+`test/` 功能包下载当前分支最新一轮结果，成功下载后仅替换 `test/results/`，保留包代码和说明。结果子目录只保存当前轮次的 x86-64 / ARM64 full 与 UBSan 结果。`test/results/report.md` 是汇总入口，`test/results/latest.json` 记录提交和作业状态；缺失架构报告不会沿用旧版本。失败运行也保存已有报告与可下载的失败作业日志；下载失败保留原结果。登录方式、目录结构和退出码见 [多架构验证说明](arm64.md)。
 
-本地演示与模拟环境结果保存在 `artifacts/`，不写入 GitHub 专用的 `test/`。原始历史报告位于 `docs/archive/`，不因下载最新结果而改写。
+本地演示与模拟环境结果保存在 `artifacts/`，不写入 GitHub 专用的 `test/results/`。原始历史报告位于 `docs/archive/`，不因下载最新结果而改写。
 
 ## 6. 常见问题
 

@@ -33,7 +33,7 @@ python3 scripts/run_demo.py --full
 | `evaluate.py` | 正确性与性能统一验收、版本结果对照 |
 | `auto_tune.py` | tracer 侧批量内存复制路径对照调优 |
 
-使用 `make -C Proj40 clean` 清理可再生成的二进制。本机报告写入仓库根目录 `artifacts/`；GitHub 最新一轮结果统一下载至与 `Proj40/` 同级的 `test/`；历史报告位于 [历史归档](../docs/archive/README.md)。
+使用 `make -C Proj40 clean` 清理可再生成的二进制。本机报告写入仓库根目录 `artifacts/`；与 `Proj40/` 同级的 `test/` 功能包将 GitHub 最新一轮结果下载至 `test/results/`；历史报告位于 [历史归档](../docs/archive/README.md)。
 
 ## 程序命名与职责
 
@@ -66,7 +66,7 @@ python3 scripts/run_demo.py --full
 推送后，从仓库根目录执行：
 
 ```bash
-python3 scripts/sync_ci_results.py --wait
+python3 -m test sync --wait
 ```
 
-脚本将当前分支最新一轮的成功或失败结果下载至 `test/`，整体替换上一轮，保留提交和 run/attempt 信息。入口说明见 [test/README.md](../test/README.md)，回归口径见[测试规范](../docs/testing.md)，ARM64 约束见[架构文档](../docs/architecture.md)。
+功能包将当前分支最新一轮的成功或失败结果下载至 `test/results/`，仅替换上一轮结果，保留提交和 run/attempt 信息；包代码与说明不会被覆盖。入口说明见 [test/README.md](../test/README.md)，回归口径见[测试规范](../docs/testing.md)，ARM64 约束见[架构文档](../docs/architecture.md)。

@@ -1,0 +1,89 @@
+name: Native x86-64 and ARM64 validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ludp-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    name: ${{ matrix.arch }} / ${{ matrix.profile }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            profile: full
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            profile: full
+          - arch: x86_64
+            runner: ubuntu-24.04
+            profile: ubsan
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            profile: ubsan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record native runner and tracing policy
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p artifacts/runner
+          {
+            uname -a
+            lscpu
+            getconf PAGESIZE
+            cc --version
+            cat /proc/sys/kernel/yama/ptrace_scope || true
+            cat /proc/sys/kernel/perf_event_paranoid || true
+          } > artifacts/runner/environment.log 2>&1
+          cat artifacts/runner/environment.log
+          case "$EXPECTED_ARCH:$(uname -m)" in
+            x86_64:x86_64|arm64:aarch64) ;;
+            *) echo 'Unexpected native runner architecture'; exit 1 ;;
+          esac
+      - name: Check Python tools
+        run: python3 -m py_compile test/*.py scripts/*.py Proj40/benchmark.py Proj40/evaluate.py Proj40/auto_tune.py
+      - name: Validate CI result package and failure handling
+        run: python3 -m test validate
+      - name: Full correctness and performance validation
+        if: matrix.profile == 'full'
+        env:
+          CFLAGS: -O2 -g -Wall -Wextra -Werror -fno-strict-aliasing -pthread
+        run: python3 scripts/run_demo.py --full --rounds 5 --output artifacts/ci
+      - name: UBSan correctness validation
+        if: matrix.profile == 'ubsan'
+        env:
+          CFLAGS: -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread
+          LDFLAGS: -pthread -fsanitize=undefined -fno-sanitize-recover=all
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: python3 scripts/run_demo.py --correctness-only --output artifacts/ci
+      - name: Add results to job summary
+        if: always()
+        run: |
+          for report in artifacts/ci/*/report.md artifacts/ci/*/benchmark/benchmark.md; do
+            if test -f "$report"; then
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - name: Upload reports including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ludp-${{ matrix.arch }}-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/ci/
+            artifacts/runner/
+          if-no-files-found: error
+          retention-days: 14

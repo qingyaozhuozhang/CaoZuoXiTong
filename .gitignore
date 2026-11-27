@@ -2,7 +2,6 @@
 /artifacts/
 __pycache__/
 *.py[cod]
-# Only the latest downloaded GitHub run is retained locally.
-/test/*
-!/test/README.md
-/.ci-results-*/
+# CI tooling is tracked; only downloaded results and staging directories are local.
+/test/results/
+/test/.ci-results-*/

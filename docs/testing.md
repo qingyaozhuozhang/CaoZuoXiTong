@@ -88,7 +88,7 @@ A3 的现有检查允许约 ±1 秒时间范围容差，并验证格式中的关
 
 ## 5. 复现命令
 
-环境要求：原生 Linux x86_64 或 ARM64、GCC、GNU make、glibc、Python 3.9 及以上，并允许父进程跟踪其子进程。以下命令从仓库根目录执行。先完成正确性检查，再采集性能；本地验收写入 `artifacts/` 的独立目录；下载的 GitHub 结果统一写入同级 `test/` 并替换旧一轮，二者用途不同。
+环境要求：原生 Linux x86_64 或 ARM64、GCC、GNU make、glibc、Python 3.9 及以上，并允许父进程跟踪其子进程。以下命令从仓库根目录执行。先完成正确性检查，再采集性能；本地验收写入 `artifacts/` 的独立目录；`test/` 功能包将下载的 GitHub 结果写入 `test/results/` 并替换旧一轮，二者用途不同。
 
 ### 5.1 构建与正确性回归
 
@@ -153,7 +153,7 @@ env -u LUDP_RING_CAP python3 Proj40/auto_tune.py \
 
 ## 6. 报告归档与结果解释
 
-[历史材料索引](archive/README.md) 区分归档基线和当前验收。2026-11-21 的旧报告来自 F4–F7 完整合并前，保留原始日志与 JSON 是为了追溯当时结论；其中的“F4 尚未实现”等文字只描述当时版本，不应直接复制进当前功能说明。旧测试日志不包含当前全部测试，不能用旧 `PASS` 代表现有提交。本机新生成的结果存入仓库根目录 `artifacts/`，与受版本管理的历史记录分离；GitHub 下载结果使用第 7 节的滚动 `test/` 目录。
+[历史材料索引](archive/README.md) 区分归档基线和当前验收。2026-11-21 的旧报告来自 F4–F7 完整合并前，保留原始日志与 JSON 是为了追溯当时结论；其中的“F4 尚未实现”等文字只描述当时版本，不应直接复制进当前功能说明。旧测试日志不包含当前全部测试，不能用旧 `PASS` 代表现有提交。本机新生成的结果存入仓库根目录 `artifacts/`，与受版本管理的历史记录分离；GitHub 下载结果使用第 7 节的滚动 `test/results/` 目录。
 
 [2026-11-27 完整演示快照](archive/reports/2026-11-27-demo/report.md) 是 A1 后端加入前的 x86_64 历史快照，带有工作树源码指纹；内核 uprobe 未取得权限。它不能用来证明当前 ARM64 实现已通过。保留快照便于评审查阅，不代替后续版本重新验收。
 
@@ -173,31 +173,38 @@ ARM64 标签对应原生 ARM64 虚拟机，工作流另外检查 `uname -m`，�
 推送后，在仓库根目录下载最新一轮：
 
 ```bash
-python3 scripts/sync_ci_results.py --wait
+python3 -m test sync --wait
 ```
 
 也可明确指定运行编号：
 
 ```bash
-python3 scripts/sync_ci_results.py --run-id RUN_ID --wait
+python3 -m test sync --run-id RUN_ID --wait
 ```
 
-下载使用本机已有 `gh` 登录，或 `GH_TOKEN` / `GITHUB_TOKEN` 环境凭据，需具有仓库 Actions 读取权限。默认选择当前分支最新的 `ci.yml` 运行。查看 `test/report.md` 获取作业结论，`test/latest.json` 记录 run ID、attempt、提交、分支、产物清单和缺失原因。文件布局为：
+下载使用本机已有 `gh` 登录，或 `GH_TOKEN` / `GITHUB_TOKEN` 环境凭据，需具有仓库 Actions 读取权限。默认选择当前分支最新的 `ci.yml` 运行；指定分支使用 `--branch BRANCH`，与 `test` 功能包名无关。查看 `test/results/report.md` 获取作业结论，`test/results/latest.json` 记录 run ID、attempt、提交、分支、产物清单和缺失原因。文件布局为：
 
 ```text
 test/
 ├── README.md
-├── report.md
-├── latest.json
-├── x86_64/
-│   ├── full/       # ci/<时间>/报告、日志及 runner 环境
-│   └── ubsan/
-├── arm64/
-│   ├── full/
-│   └── ubsan/
-└── failed-jobs/    # 失败作业日志，存在时保存
+├── __init__.py
+├── __main__.py                 # sync / validate 命令入口
+├── sync_ci_results.py
+├── ci_results_validation.py
+└── results/                    # 下载后生成，仅此目录滚动替换
+    ├── report.md
+    ├── latest.json
+    ├── x86_64/
+    │   ├── full/               # ci/<时间>/报告、日志及 runner 环境
+    │   └── ubsan/
+    ├── arm64/
+    │   ├── full/
+    │   └── ubsan/
+    └── failed-jobs/            # 失败作业日志，存在时保存
 ```
 
-每次同步先下载到临时目录，完成后整体替换 `test/` 上一轮结果；网络或下载失败保留已有目录。失败运行也保存，缺失产物不会混用旧文件，部分重跑按当前 attempt 明确标记未生成的产物。生成的结果不提交 Git，避免结果文件再次触发 CI；`test/README.md` 随源码维护。本地独立运行仍保存在 `artifacts/`，历史归档不受同步影响。
+每次同步先下载到临时目录，完成后仅替换 `test/results/` 上一轮结果；网络或下载失败保留已有结果。失败运行也保存，缺失产物不会混用旧文件，部分重跑按当前 attempt 明确标记未生成的产物。生成的结果不提交 Git，避免结果文件再次触发 CI；`test/` 下的包代码和说明随源码维护。本地独立运行仍保存在 `artifacts/`，历史归档不受同步影响。
 
-共享 runner 适合功能回归和明显性能退化定位，调度与频率变化可能影响最大延迟；正式指标应在指定验收机复测。CI 未强制 `--require-kernel`，绿色状态不表示内核对照已完成。Actions 产物有保留期限，需及时同步本轮证据；正式提交前应将与提交匹配的结果另行归档，不能依赖滚动 `test/` 永久保留历史。
+同步工具的离线回归独立于项目 C/汇编功能验证，可运行 `python3 -m test validate`。它使用临时结果目录检查请求重试、产物处理和替换行为，不访问 GitHub，也不改写已有下载结果。完整使用说明见 [test 功能包](../test/README.md)。
+
+共享 runner 适合功能回归和明显性能退化定位，调度与频率变化可能影响最大延迟；正式指标应在指定验收机复测。CI 未强制 `--require-kernel`，绿色状态不表示内核对照已完成。Actions 产物有保留期限，需及时同步本轮证据；正式提交前应将与提交匹配的结果另行归档，不能依赖滚动 `test/results/` 永久保留历史。

@@ -1,38 +1,49 @@
 # GitHub 验证结果功能包
 
-本目录与 `Proj40/` 同级，集中维护 GitHub Actions 运行查询、结果下载、报告汇总及同步逻辑的离线验证。包代码随仓库提交，最新一轮原生 x86-64 / ARM64 结果单独保存在 `results/`。本说明不是测试通过报告。
+## 首次配置 GitHub（只需一次）
 
-## 运行入口
-
-所有命令从仓库根目录执行，使用 Python 3.9 及以上，无第三方 Python 包依赖。首次同步前安装支持 `gh auth token` 的 [GitHub CLI](https://github.com/cli/cli/blob/trunk/docs/install_linux.md)，并完成本机登录：
+需要 Python 3.9 及以上，以及支持 `gh auth token` 的 [GitHub CLI](https://github.com/cli/cli/blob/trunk/docs/install_linux.md)。安装后，在本机完成登录：
 
 ```bash
 gh auth login --hostname github.com --web
 ```
 
+已登录后无需每次重复操作。也可使用本机的 `GH_TOKEN` / `GITHUB_TOKEN`，凭据需要仓库 Actions 读取权限。
+
+## 常用命令
+
+**推送代码后，在仓库根目录执行：**
+
 ```bash
-# 查看功能包及同步选项
-python3 -m test --help
+python3 -m test sync --branch test --wait --proxy http://127.0.0.1:7890
+```
+
+等待 `test` 分支最新一轮 GitHub 测试结束，下载 **x86_64 和 ARM64** 的完整测试及 UBSan 报告。代理端口为本机的 `7890`。
+
+完成后查看 **[结果汇总](results/report.md)**；详细数据分别位于 `results/x86_64/` 和 `results/arm64/`。无需执行 `git pull`。
+
+每次同步只替换 `results/`，保留最新一轮结果，包内代码和文档不受影响。失败运行也会保存；网络或下载失败时保留旧结果。下载内容已由 `.gitignore` 忽略。
+
+<details>
+<summary>其他命令（按需使用）</summary>
+
+```bash
+# 查看同步选项
 python3 -m test sync --help
 
-# 等待当前分支最新一轮 ci.yml 运行结束并下载结果
-python3 -m test sync --wait
-
-# 指定 test 分支及本机 HTTP 代理（端口按实际配置填写）
-python3 -m test sync --branch test --wait --proxy http://127.0.0.1:7890
-
 # 指定 Actions 运行编号
-python3 -m test sync --run-id RUN_ID --wait
+python3 -m test sync --run-id RUN_ID --wait --proxy http://127.0.0.1:7890
 
-# 离线验证同步逻辑，不访问 GitHub，不写入真实结果目录
+# 离线验证同步工具本身，不访问 GitHub
 python3 -m test validate
 ```
 
-`test` 是功能包目录名；`--branch test` 中的 `test` 是 Git 分支名，二者没有绑定关系。不指定 `--branch` 时，选择当前检出分支的最新运行。`sync` 下载已经触发的运行结果，`validate` 检查同步工具本身；项目功能和性能演示仍使用 `python3 scripts/run_demo.py`。
+`--branch` 指定 Git 分支，省略时使用当前分支，与功能包目录名无绑定关系。项目功能和性能演示仍使用 `python3 scripts/run_demo.py`。
 
-同步读取已有 `gh` 登录，或本机的 `GH_TOKEN` / `GITHUB_TOKEN` 环境变量，凭据需要仓库 Actions 读取权限。启动后立即显示分支、认证与代理状态，以及请求、等待和下载进度。默认单次网络 I/O 等待 15 秒，临时错误额外重试两次；API 限流会明确提示登录或稍后重试。已启动进程不会自动载入代码修改，更新后应先停止旧进程再执行新命令。
+</details>
 
-## 文件与结果
+<details>
+<summary>功能包目录</summary>
 
 ```text
 test/
@@ -49,6 +60,6 @@ test/
     └── failed-jobs/            可取得的失败作业日志
 ```
 
-每次完整下载到暂存目录后，仅替换 `results/`，包代码与本说明始终保留。失败运行同样保存；缺失架构或部分重跑未生成的报告明确标记缺失，不沿用上一轮文件。网络或下载失败不会破坏已有结果。
+</details>
 
-生成的 `results/` 不进入 Git，避免结果提交再次触发 CI。同步完成即可读取本地 `test/results/report.md`，无需 `git pull`。本地演示结果保存在 `artifacts/`，历史快照保存在 `docs/archive/`。登录、网络排查与退出码见 [ARM64 实现与验证](../docs/arm64.md#4-test-功能包与最新结果)。
+网络排查、超时重试和退出码见 [ARM64 实现与验证](../docs/arm64.md#4-test-功能包与最新结果)。

@@ -440,18 +440,62 @@ static void refresh_thread_fsbases(ludp_ctx *c)
             update_thread_fsbase(c, c->tids[i]);
 }
 
+typedef struct {
+    struct timespec deadline;
+    unsigned polls;
+} stop_wait;
+
+static int stop_wait_init(stop_wait *wait, int timeout_ms)
+{
+    if (clock_gettime(CLOCK_MONOTONIC, &wait->deadline)) return -1;
+    wait->deadline.tv_sec += timeout_ms / 1000;
+    wait->deadline.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+    if (wait->deadline.tv_nsec >= 1000000000L) {
+        ++wait->deadline.tv_sec;
+        wait->deadline.tv_nsec -= 1000000000L;
+    }
+    wait->polls = 0;
+    return 0;
+}
+
+static int64_t stop_wait_remaining(const stop_wait *wait)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now)) return -1;
+    int64_t remaining = (int64_t)(wait->deadline.tv_sec - now.tv_sec) *
+                        INT64_C(1000000000) +
+                        wait->deadline.tv_nsec - now.tv_nsec;
+    if (remaining <= 0) { errno = ETIMEDOUT; return -1; }
+    return remaining;
+}
+
+/* Most ptrace stops arrive within a few microseconds. A fixed 1 ms sleep
+ * after every empty waitpid artificially adds milliseconds to every remote
+ * mmap/munmap. Briefly poll, then back off; the monotonic deadline still
+ * bounds the entire wait, including scheduling delays and EINTR retries. */
+static int stop_wait_pause(stop_wait *wait)
+{
+    int64_t remaining = stop_wait_remaining(wait);
+    if (remaining < 0) return -1;
+    if (wait->polls++ < 16) return 0;
+    long delay = wait->polls < 256 ? 50000L : 1000000L;
+    if (remaining < delay) delay = (long)remaining;
+    struct timespec pause = { .tv_nsec = delay };
+    if (nanosleep(&pause, NULL) && errno != EINTR) return -1;
+    return 0;
+}
+
 int wait_stop(pid_t tid, int timeout_ms)
 {
-    int st;
-    for (int i = 0; i < timeout_ms; i++) {
+    stop_wait wait;
+    if (stop_wait_init(&wait, timeout_ms)) return -1;
+    for (;;) {
+        int st;
         pid_t w = waitpid(tid, &st, __WALL | WNOHANG);
-        if (w == tid)
-            return st;
-        if (w < 0)
-            return -1;
-        usleep(1000);
+        if (w == tid) return st;
+        if (w < 0 && errno != EINTR) return -1;
+        if (stop_wait_pause(&wait)) return -1;
     }
-    return -1;
 }
 
 static bool all_threads_stopped(const ludp_ctx *c)
@@ -544,9 +588,23 @@ int quiesce(ludp_ctx *c)
         }
     }
 
-    int deadline = 3000; /* ms */
+    stop_wait wait;
+    if (stop_wait_init(&wait, 3000)) {
+        int err = errno;
+        free(pending);
+        resume_known_stops(c);
+        errno = err;
+        return -1;
+    }
 
-    while (remain > 0 && deadline > 0) {
+    int wait_error = 0;
+    while (remain > 0) {
+        /* A continuous stream of clone/exit/signal statuses must not bypass
+         * the deadline simply because waitpid never reports an empty queue. */
+        if (stop_wait_remaining(&wait) < 0) {
+            wait_error = errno;
+            break;
+        }
         int st;
         pid_t w = waitpid(-1, &st, __WALL | WNOHANG);
         if (w > 0) {
@@ -615,15 +673,15 @@ int quiesce(ludp_ctx *c)
             errno = err;
             return -1;
         }
-        if (w < 0)
-            continue;
-        usleep(1000);
-        deadline--;
+        if (stop_wait_pause(&wait)) {
+            wait_error = errno;
+            break;
+        }
     }
     free(pending);
 
     if (remain > 0) {
-        int err = ETIMEDOUT;
+        int err = wait_error ? wait_error : ETIMEDOUT;
         resume_known_stops(c);
         errno = err;
         return -1;
@@ -935,18 +993,16 @@ static uintptr_t find_syscall_insn(ludp_ctx *c)
  * syscall entry/exit and corrupting the saved register transaction. */
 static int wait_syscall_stop(ludp_ctx *c, pid_t tid, int timeout_ms)
 {
-    for (int elapsed = 0; elapsed < timeout_ms; ++elapsed) {
+    stop_wait wait;
+    if (stop_wait_init(&wait, timeout_ms)) return -1;
+    for (;;) {
         int st = 0;
         pid_t w = waitpid(tid, &st, __WALL | WNOHANG);
-        if (w == 0) {
-            usleep(1000);
+        if (w == 0 || (w < 0 && errno == EINTR)) {
+            if (stop_wait_pause(&wait)) return -1;
             continue;
         }
         if (w < 0) {
-            if (errno == EINTR) {
-                --elapsed;
-                continue;
-            }
             return -1;
         }
         if (WIFEXITED(st) || WIFSIGNALED(st)) {
@@ -971,8 +1027,6 @@ static int wait_syscall_stop(ludp_ctx *c, pid_t tid, int timeout_ms)
         errno = ev == 0 ? EINTR : EBUSY;
         return -1;
     }
-    errno = ETIMEDOUT;
-    return -1;
 }
 
 static int remote_syscall(ludp_ctx *c, long nr, unsigned long a1, unsigned long a2,
@@ -1206,6 +1260,68 @@ int remote_mmap(ludp_ctx *c, size_t size, int prot, uintptr_t *out)
     record_mapping(c, m, ret, size, prot);
     if (out)
         *out = ret;
+    return 0;
+}
+
+#ifdef MADV_HUGEPAGE
+static bool threads_allow_optional_syscalls(const ludp_ctx *c)
+{
+    if (!c->nthreads) return false;
+    for (int i = 0; i < c->nthreads; ++i) {
+        if (!c->seized[i] || !c->thread_stopped[i]) return false;
+        char path[96], line[256];
+        snprintf(path, sizeof path, "/proc/%d/task/%d/status", c->pid, c->tids[i]);
+        FILE *status = fopen(path, "r");
+        if (!status) return false;
+        bool known_unfiltered = false;
+        while (fgets(line, sizeof line, status)) {
+            if (strncmp(line, "Seccomp:", 8)) continue;
+            char *end;
+            errno = 0;
+            long mode = strtol(line + 8, &end, 10);
+            if (end != line + 8 && !errno) {
+                while (isspace((unsigned char)*end)) ++end;
+                known_unfiltered = mode == 0 && *end == '\0';
+            }
+            break;
+        }
+        if (ferror(status)) known_unfiltered = false;
+        fclose(status);
+        if (!known_unfiltered) return false;
+    }
+    return true;
+}
+#endif
+
+/* A million-call capture touches hundreds of megabytes of event storage.
+ * Transparent huge pages reduce both first-touch work and final page-table
+ * teardown. This is only a hint: disabled/unavailable THP keeps normal pages
+ * and identical event capacity. Never hide a ptrace/register transaction
+ * failure as an unsupported advisory operation. */
+static int advise_ring_pages(ludp_ctx *c, size_t size)
+{
+#ifdef MADV_HUGEPAGE
+    const char *option = getenv("LUDP_HUGEPAGES");
+    if (size >= 2u * 1024u * 1024u && (!option || strcmp(option, "0"))) {
+        uintptr_t result;
+        int saved_errno = errno;
+        /* seccomp may kill or trap instead of returning an errno. Never
+         * execute an optional syscall unless every stopped thread is known
+         * to have no filter. Unknown /proc state also means skip the hint. */
+        if (!threads_allow_optional_syscalls(c)) {
+            errno = saved_errno;
+            return 0;
+        }
+        if (remote_syscall(c, __NR_madvise, c->ring_addr, size,
+                           MADV_HUGEPAGE, 0, 0, 0, &result))
+            return -1;
+        /* Any kernel rejection of this optional hint is harmless. */
+        errno = saved_errno;
+    }
+#else
+    (void)c;
+    (void)size;
+#endif
     return 0;
 }
 
@@ -1788,6 +1904,8 @@ ludp_ctx *ludp_attach(pid_t pid)
     size_t ring_bytes = c->events_off + (size_t)c->ring_cap * LUDP_EVENT_SZ;
     if (remote_mmap(c, ring_bytes, PROT_READ | PROT_WRITE, &c->ring_addr) != 0)
         goto fail;
+    if (advise_ring_pages(c, ring_bytes))
+        goto fail;
 
     u64 zero = 0;
     if (mem_write(c, c->ring_addr + RO_SEQ, &zero, 8) ||
@@ -2183,11 +2301,12 @@ int ludp_event_format_perf(const ludp_event *event,
     if (event->type == LUDP_EVENT_ENTRY) {
         printed = snprintf(buf, cap,
             "%-16.16s %d/%llu [%03d] %llu.%09llu: ludp:%s_%s: "
-            "probe_id=%llu arg0=0x%llx arg1=0x%llx\n",
+            "probe_id=%llu call_id=%llu arg0=0x%llx arg1=0x%llx\n",
             comm && *comm ? comm : "ludp", (int)pid,
             (unsigned long long)tid, cpu < 0 ? 0 : cpu,
             (unsigned long long)seconds, (unsigned long long)nanos,
             name, kind, (unsigned long long)event->probe_id,
+            (unsigned long long)event->call_id,
             (unsigned long long)event->args[0],
             (unsigned long long)event->args[1]);
     } else {

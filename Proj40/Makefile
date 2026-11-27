@@ -18,8 +18,8 @@ $(error Unsupported compiler target: $(TARGET_MACHINE); expected x86_64 or aarch
 endif
 
 LIB_OBJS = ludp.o probes.o elf.o $(ARCH_OBJS)
-VALIDATION_BINS = instruction_validation probe_abi_validation probe_lifecycle_validation multiprobe_validation probe_extensions_validation callback_validation thread_signal_validation api_contract_validation
-DEMO_BINS = probe_demo
+VALIDATION_BINS = instruction_validation probe_abi_validation probe_lifecycle_validation multiprobe_validation probe_extensions_validation callback_validation thread_signal_validation api_contract_validation aslr_pie_validation
+DEMO_BINS = probe_demo event_stream_demo
 BENCHMARK_BINS = getpid_benchmark
 PROGRAMS = $(VALIDATION_BINS) $(DEMO_BINS) $(BENCHMARK_BINS)
 
@@ -57,10 +57,16 @@ thread_signal_validation: thread_signal_validation.c libludp.a
 api_contract_validation: api_contract_validation.c libludp.a
 	$(CC) $(CFLAGS) -rdynamic -fpatchable-function-entry=8 -o $@ $< libludp.a $(LDFLAGS)
 
+aslr_pie_validation: aslr_pie_validation.c libprobe_targets.so libludp.a
+	$(CC) $(CFLAGS) -fPIE -pie -rdynamic -fpatchable-function-entry=8 -o $@ $< libludp.a -L. -lprobe_targets -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
+
 probe_demo: probe_demo.c libprobe_targets.so libludp.a
 	$(CC) $(CFLAGS) -o $@ probe_demo.c libludp.a -ldl -L. -lprobe_targets -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
 
 getpid_benchmark: getpid_benchmark.c libludp.a
+	$(CC) $(CFLAGS) -fno-builtin -o $@ $< libludp.a -ldl $(LDFLAGS)
+
+event_stream_demo: event_stream_demo.c libludp.a
 	$(CC) $(CFLAGS) -fno-builtin -o $@ $< libludp.a -ldl $(LDFLAGS)
 
 %.o: %.c ludp.h ludp_internal.h
@@ -80,7 +86,9 @@ check: all
 	./callback_validation
 	./thread_signal_validation
 	./api_contract_validation
+	./aslr_pie_validation
 	./probe_demo
+	./event_stream_demo --standalone
 
 # Keep the conventional target as an alias for existing automation.
 test: check

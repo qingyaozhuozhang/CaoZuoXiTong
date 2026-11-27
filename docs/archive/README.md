@@ -1,42 +1,35 @@
-# 历史证据归档
+# 固定验证报告
 
-本目录保存固定的运行快照，结论仅适用于记录中的源码与环境，不自动证明后续工作树已经通过验收。新结果使用 `artifacts/` 下的独立运行目录，通过复核后可选择完整快照归档。
+本目录保存与源码提交对应的完整测试快照，供评审复核功能、性能、运行环境和跳过项。它随源码提交，不随 `test/results/` 的下一次下载更新。
 
-原始报告保留运行当时的程序名称、命令和源码指纹，不随文件重命名改写。当前程序名称与职责见 [源码目录说明](../../Proj40/README.md)；旧快照中的命令应结合该说明阅读，重新验证时使用当前构建与演示入口。
+## 2026-11-27 原生双架构验证
 
-## 2026-11-27 完整演示快照
+- 被测提交：`3ffd7368af3ac1ba1df4385ca4bf1f342b858903`。
+- GitHub 运行：[45946335169 / attempt 1](https://github.com/qingyaozhuozhang/CaoZuoXiTong/actions/runs/45946335169)，触发分支为 `test`。
+- [运行汇总](reports/2026-11-27-3ffd736/report.md) · [提交、作业和产物清单](reports/2026-11-27-3ffd736/latest.json)。
+- 四项作业均成功，报告无缺失；每份运行摘要记录的 30 个源码文件 SHA-256 均与被测提交一致，构建前后的源码指纹一致。
 
-[演示报告](reports/2026-11-27-demo/report.md) 包含 9 个测试/演示程序、五轮百万次基准和全部步骤日志；[性能报告](reports/2026-11-27-demo/benchmark/benchmark.md) 保留插入、移除、attach 与 detach 的不同口径。[summary.json](reports/2026-11-27-demo/summary.json) 记录环境、编译选项、工作树状态和源码 SHA-256。
+| 架构 | 完整功能与性能报告 | UBSan 报告 | Runner 环境 |
+| --- | --- | --- | --- |
+| x86_64 | [full](reports/2026-11-27-3ffd736/x86_64/full/ci/20261127-133151-547499/report.md) | [ubsan](reports/2026-11-27-3ffd736/x86_64/ubsan/ci/20261127-133151-815048/report.md) | [full](reports/2026-11-27-3ffd736/x86_64/full/runner/environment.log) / [ubsan](reports/2026-11-27-3ffd736/x86_64/ubsan/runner/environment.log) |
+| ARM64 | [full](reports/2026-11-27-3ffd736/arm64/full/ci/20261127-133152-543325/report.md) | [ubsan](reports/2026-11-27-3ffd736/arm64/ubsan/ci/20261127-133152-099880/report.md) | [full](reports/2026-11-27-3ffd736/arm64/full/runner/environment.log) / [ubsan](reports/2026-11-27-3ffd736/arm64/ubsan/runner/environment.log) |
 
-该快照在本轮文档与 demo 整理时实际执行，结果为所选检查 PASS，内核 uprobe 因权限为 SKIP。运行基于 `4a309dd` 加未提交修改，不能将其结果直接归到原始 `4a309dd`。归档文件从 `artifacts/demo/20261127-120547-897718/` 逐字节复制，没有改写结果；后续版本仍须重新运行。
+每份报告旁保留 `summary.json` 和全部步骤日志；两个 `full` 目录另有 `benchmark/`，包含五轮百万次 `getpid` 基准的 Markdown、JSON 和原始输出。UBSan 作业只验证正确性，不采集性能数据。
 
-沙箱中首次执行因 ptrace 权限被拒绝而失败，对应本地日志保留在 `artifacts/demo/20261127-120532-975511/`。本快照来自允许跟踪自建子进程的执行环境；没有修改主机 ptrace 或 perf 策略，也没有获取内核 uprobe 实测数据。
+两种架构的入口与入口加返回探针开销、插入/移除门禁均通过。内核 uprobe 对照均因 `Permission denied` 为 **SKIP**，因此三组实测比较尚未完成；完整 detach 另行计时，未全部低于 10 ms。具体边界见 [测试与性能评估](../testing.md)。
 
-## 2026-11-21 原始基线
+## 来源与完整性
 
-[原始报告](reports/2026-11-21/benchmark.md) 来自 F4–F7 完整整合之前的版本。文件从原 `Proj40/reports/` 整体迁入，内容保持不变；其中“F4 尚未实现”等描述仅适用于当时版本。精确源码身份未完整记录，不能追补为当前提交。
+报告来自本机已下载的 `test/results/`，62 个报告、元数据和日志文件逐字节复制，未修改原始结论或样本。下载工具的目录管理标记不属于测试报告，未纳入归档。原始汇总中关于“替换上一轮”的文字描述下载行为，本归档保持固定。
 
-| 文件 | 用途 |
-| --- | --- |
-| [benchmark.json](reports/2026-11-21/benchmark.json) | 环境、每轮原始样本与指标 |
-| [benchmark.log](reports/2026-11-21/benchmark.log) | 基准程序输出 |
-| [tests.log](reports/2026-11-21/tests.log) | 当时的测试输出，不包含当前全部套件 |
-| [优化前基准.json](reports/2026-11-21/优化前基准.json) | 历史版本对照输入 |
-| [对照分析.md](reports/2026-11-21/对照分析.md) | 当时两批次结果比较 |
-| [自动调优.md](reports/2026-11-21/自动调优.md)、[自动调优.json](reports/2026-11-21/自动调优.json) | tracer 数据复制路径对照 |
+归档新增 [SHA256SUMS](reports/2026-11-27-3ffd736/SHA256SUMS) 校验清单，可在仓库根目录验证：
 
-上述内核 uprobe 组为 `SKIP`，不提供与内核的实测加速比。原始数据与说明一并保留，不能只选有利数值引用。
+```bash
+(cd docs/archive/reports/2026-11-27-3ffd736 && sha256sum --check SHA256SUMS)
+```
 
-## 历史 CI 记录索引
+该快照证明的是上述提交在记录环境中的测试结果，后续修改需重新运行验证。持续下载的新结果仍留在被 Git 忽略的 `test/results/`，只有经复核的完整运行才加入固定归档。
 
-以下对应关系整理自旧版本文档，本轮未重新联网确认运行状态和产物可用性。它们是历史追溯入口，不代替本轮测试。
+## 已清理的旧材料
 
-| 历史提交 | 记录中的运行 | 阶段 |
-| --- | --- | --- |
-| `19eb240` | [run #2](https://github.com/qingyaozhuozhang/CaoZuoXiTong/actions/runs/45433474571) | F1–F7 整合 |
-| `231fffb` | [run #5](https://github.com/qingyaozhuozhang/CaoZuoXiTong/actions/runs/45445417086) | A2/A3/A5 |
-| `36538a4` | [run #12](https://github.com/qingyaozhuozhang/CaoZuoXiTong/actions/runs/45523097229) | 线程与 ELF 加固 |
-| `8a5343c` | [run #13](https://github.com/qingyaozhuozhang/CaoZuoXiTong/actions/runs/45524284713) | A4 向量状态 |
-| `f04615e` | [run #14](https://github.com/qingyaozhuozhang/CaoZuoXiTong/actions/runs/45524720764) | UBSan 与完整验收 |
-
-旧分支说明和硬化报告已整合进正式文档，其原文可在 Git 历史中查阅。Actions 产物可能有保留期限，正式提交应保存与实际提交对应的报告文件。
+已移除 2026-11-21 的 F1–F3 基线与调优记录，以及 2026-11-27 加入 A1 前的本机 demo 快照。它们分别缺少完整功能覆盖或 ARM64 验证，不再作为当前提交文档的主要证据；原始内容可从 Git 历史追溯。清理按版本和覆盖范围进行，保留的双架构快照包含全部原始日志、跳过项和性能边界。

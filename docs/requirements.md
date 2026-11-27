@@ -33,10 +33,10 @@
 | F4 清理 | `probe_lifecycle_validation` 核验原始字节、映射回收和槽位复用 | 应用安全点；remove 与 detach 口径区分 |
 | F5 动态开关 | `probe_lifecycle_validation` 对照启用、停用与再次启用的事件 | 已有事件和在途返回不会因停用消失 |
 | F6 ≥16 个探针 | `multiprobe_validation` 实际触发并逐 ID 核验 | 注册表容量不等于已验证最大并发规模 |
-| F7 多线程安全 | `probe_abi_validation`、`thread_signal_validation` 并发/信号测试 | 不承诺任意指令位置 下热插拔 |
-| A1 x86-64 + ARM64 | 两套指令与 trampoline 后端、双架构 CI | 原生 ARM64 验收待推送运行；当前模拟结果只作功能验证 |
+| F7 多线程安全 | `probe_abi_validation`、`thread_signal_validation` 并发/信号测试 | 不承诺在任意指令位置热插拔 |
+| A1 x86-64 + ARM64 | 两套指令与 trampoline 后端、双架构 CI | `3ffd736` 两架构原生 full / UBSan 均通过，见 [验证报告归档](archive/README.md)；后续提交需重新验证 |
 | A2 条件过滤 | `probe_extensions_validation` 核验比较运算 | 单参数、无符号比较，不解引用指针 |
-| A3 perf/ftrace 合流 | 时间估计、TID 和格式测试 | 真实事件流合并及误差界尚未验证 |
+| A3 perf/ftrace 合流 | 真实用户态事件与 ftrace getpid 事件合流、TID/CPU/时间容差检查 | 新版双架构结果待取得；不覆盖所有 perf/kprobe 格式和长期漂移 |
 | A4 目标进程函数调用 | `callback_validation` 回调、状态恢复、更新与忙时保护 | 回调限制及 CPU 条件见支持范围文档 |
 | A5 热更新 | 配置、generation、非法输入和回滚测试 | 依赖安全点；回滚失败需要处理 |
 
@@ -51,9 +51,9 @@
 | 环境可复现 | 构建前提、命令、依赖、运行环境记录 |
 | 演示可执行 | `scripts/run_demo.py` 和 `probe_demo.c` |
 | 结果可判定 | PASS/FAIL/SKIP、失败退出码、阈值和原始样本 |
-| 证据可留存 | 本地独立运行目录、GitHub 最新结果目录 `test/results/`、逐步日志及结构化摘要 |
+| 证据可留存 | 本地运行目录、GitHub 最新结果 `test/results/`、固定验证报告 `docs/archive/`、逐步日志及结构化摘要 |
 | 演示可复现 | 执行顺序、输出解释及结果核验方法 |
-| 结论可复核 | 历史报告隔离、源码身份、缺项和适用范围说明 |
+| 结论可复核 | 固定报告与滚动结果分离、源码身份、缺项和适用范围说明 |
 
 这些交付用于支持“文档完整性和 demo 质量 15%”的评审，不代表已经获得相应分数。
 

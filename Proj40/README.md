@@ -30,10 +30,12 @@ python3 scripts/run_demo.py --full
 | `*_validation.c`、`validation_arch.h` | 功能、ABI、线程和错误路径验证；架构适配辅助函数 |
 | `*_sentinel.S`、`abi_state_aarch64.S`、`simd_state_aarch64.S` | 对应架构的寄存器状态哨兵 |
 | `getpid_benchmark.c`、`benchmark.py` | 百万次 getpid 标准基准及原始报告 |
+| `event_stream_demo.c` | 导出真实用户态事件，配合 `scripts/event_merge_demo.py` 验证 A3 内核事件合流 |
+| `benchmark_validation.py` | 离线检查性能门禁，拒绝缺失/重复样本、非法数值及不完整清理 |
 | `evaluate.py` | 正确性与性能统一验收、版本结果对照 |
 | `auto_tune.py` | tracer 侧批量内存复制路径对照调优 |
 
-使用 `make -C Proj40 clean` 清理可再生成的二进制。本机报告写入仓库根目录 `artifacts/`；与 `Proj40/` 同级的 `test/` 功能包将 GitHub 最新一轮结果下载至 `test/results/`；历史报告位于 [历史归档](../docs/archive/README.md)。
+使用 `make -C Proj40 clean` 清理可再生成的二进制。本机报告写入仓库根目录 `artifacts/`；与 `Proj40/` 同级的 `test/` 功能包将 GitHub 最新一轮结果下载至 `test/results/`；固定提交的原始验证报告位于 [报告归档](../docs/archive/README.md)。
 
 ## 程序命名与职责
 
@@ -49,7 +51,9 @@ python3 scripts/run_demo.py --full
 | `callback_validation.c` / `callback_validation` | 目标进程内回调、现场恢复与忙时保护 |
 | `thread_signal_validation.c` / `thread_signal_validation` | 已有线程、阻塞状态、线程退出及信号交付 |
 | `api_contract_validation.c` / `api_contract_validation` | 公共 API 错误契约及主程序 ELF 符号解析 |
+| `aslr_pie_validation.c` / `aslr_pie_validation` | 8 次独立 exec 后的 PIE/动态库地址解析与实际探针验证 |
 | `probe_demo.c` / `probe_demo` | 可读的动态库函数入口、六参数与返回值演示 |
+| `event_stream_demo.c` / `event_stream_demo` | 固定 CPU 采集 libc getpid，导出带单调时间的 perf-script 风格事件 |
 | `getpid_benchmark.c` / `getpid_benchmark` | 百万次 getpid 的无探针、用户态探针与内核 uprobe 基准 |
 | `probe_targets.c` / `libprobe_targets.so` | 整数、指针、浮点、递归、栈参数和信号等被探测函数 |
 | `abi_state_sentinel.S` | 通用寄存器、RFLAGS、浮点状态及 red zone 哨兵 |
@@ -61,7 +65,7 @@ python3 scripts/run_demo.py --full
 
 ## GitHub Actions 验证结果
 
-[CI 工作流](../.github/workflows/ci.yml) 使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 原生 runner，分别执行完整功能/性能和 UBSan 回归。ARM64 后端已提供，A1 的最终结论仍需同一提交的两架构原生结果；不能用交叉编译或历史 x86_64 报告代替。
+[CI 工作流](../.github/workflows/ci.yml) 使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 原生 runner，分别执行完整功能/性能和 UBSan 回归。提交 `3ffd736` 的两架构 full / UBSan 四个作业均已通过，原始证据见 [验证报告归档](../docs/archive/README.md)。后续提交需重新验证，交叉编译与模拟执行不替代原生性能测试。
 
 推送后，从仓库根目录执行：
 

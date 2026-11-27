@@ -1,0 +1,10 @@
+started: 2026-11-27T13:31:55+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./callback_validation
+
+A4 ARM64 SIMD register preservation: PASS
+A4 in-process call suite: PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.035

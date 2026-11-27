@@ -47,6 +47,9 @@ jobs:
             cc --version
             cat /proc/sys/kernel/yama/ptrace_scope || true
             cat /proc/sys/kernel/perf_event_paranoid || true
+            cat /sys/bus/event_source/devices/uprobe/type || true
+            cat /sys/kernel/mm/transparent_hugepage/enabled || true
+            cat /sys/kernel/mm/transparent_hugepage/defrag || true
           } > artifacts/runner/environment.log 2>&1
           cat artifacts/runner/environment.log
           case "$EXPECTED_ARCH:$(uname -m)" in
@@ -54,14 +57,41 @@ jobs:
             *) echo 'Unexpected native runner architecture'; exit 1 ;;
           esac
       - name: Check Python tools
-        run: python3 -m py_compile test/*.py scripts/*.py Proj40/benchmark.py Proj40/evaluate.py Proj40/auto_tune.py
+        run: python3 -m py_compile test/*.py scripts/*.py Proj40/*.py
       - name: Validate CI result package and failure handling
         run: python3 -m test validate
+      - name: Validate performance evidence and strict gates
+        run: python3 Proj40/benchmark_validation.py
+      - name: Prepare native kernel tracing
+        if: matrix.profile == 'full'
+        run: |
+          # Keep diagnostics even if the runner lacks a kernel facility. The
+          # following strict validation records missing facilities as failures.
+          set +e
+          {
+            sudo -n id
+            if ! mountpoint -q /sys/kernel/tracing; then
+              sudo -n mount -t tracefs nodev /sys/kernel/tracing
+            fi
+            sudo -n ls /sys/kernel/tracing/instances
+            sudo -n cat /sys/kernel/tracing/trace_clock
+            sudo -n cat /sys/kernel/tracing/events/syscalls/sys_enter_getpid/format
+          } > artifacts/runner/tracing-setup.log 2>&1
+          cat artifacts/runner/tracing-setup.log
       - name: Full correctness and performance validation
         if: matrix.profile == 'full'
         env:
           CFLAGS: -O2 -g -Wall -Wextra -Werror -fno-strict-aliasing -pthread
-        run: python3 scripts/run_demo.py --full --rounds 5 --output artifacts/ci
+        # The hosted VM is ephemeral. Root is limited to this validation command;
+        # no global sysctl, tracing configuration, or repository settings change.
+        # Pass safe.directory via this process environment so root can record
+        # the runner-owned checkout's commit and source identity.
+        run: |
+          sudo -n env "CFLAGS=$CFLAGS" \
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory \
+            "GIT_CONFIG_VALUE_0=$GITHUB_WORKSPACE" \
+            python3 scripts/run_demo.py --full --require-kernel --require-merge \
+              --rounds 5 --output artifacts/ci
       - name: UBSan correctness validation
         if: matrix.profile == 'ubsan'
         env:
@@ -69,10 +99,19 @@ jobs:
           LDFLAGS: -pthread -fsanitize=undefined -fno-sanitize-recover=all
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         run: python3 scripts/run_demo.py --correctness-only --output artifacts/ci
+      - name: Record independent kernel uprobe capability check
+        if: always() && matrix.profile == 'full'
+        run: |
+          if test -x Proj40/getpid_benchmark; then
+            sudo -n Proj40/getpid_benchmark --kernel-check > artifacts/runner/uprobe-check.log 2>&1
+            cat artifacts/runner/uprobe-check.log
+          else
+            echo 'Kernel check unavailable: benchmark executable was not built.' > artifacts/runner/uprobe-check.log
+          fi
       - name: Add results to job summary
         if: always()
         run: |
-          for report in artifacts/ci/*/report.md artifacts/ci/*/benchmark/benchmark.md; do
+          for report in artifacts/ci/*/report.md artifacts/ci/*/benchmark/benchmark.md artifacts/ci/*/event-merge/report.md; do
             if test -f "$report"; then
               cat "$report" >> "$GITHUB_STEP_SUMMARY"
             fi

@@ -1,0 +1,13 @@
+started: 2026-11-27T13:31:54+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./probe_abi_validation
+
+F1-F3 flags=1 PASS
+F1-F3 flags=3 PASS
+F1-F3 flags=3 PASS
+ring overflow/recovery PASS
+attach/detach churn PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.265

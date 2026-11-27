@@ -1,0 +1,34 @@
+started: 2026-11-27T13:31:55+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: /usr/bin/python3 benchmark.py --iterations 1000000 --rounds 5 --output /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-133152-543325/benchmark
+
+SAMPLE mode=baseline round=1 iterations=1000000 total_ns=199359292 ns_per_call=199.359 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=1 iterations=1000000 total_ns=199061676 ns_per_call=199.062 events=0 drops=0 missed=0 stops=0 attach_ms=5.589 insert_ms=0.000 remove_ms=0.000 detach_ms=5.383 status=PASS
+SAMPLE mode=entry round=1 iterations=1000000 total_ns=267785026 ns_per_call=267.785 events=1000000 drops=0 missed=0 stops=0 attach_ms=4.508 insert_ms=2.804 remove_ms=3.278 detach_ms=12.717 status=PASS
+SAMPLE mode=return round=1 iterations=1000000 total_ns=354982045 ns_per_call=354.982 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.548 insert_ms=5.743 remove_ms=5.644 detach_ms=21.206 status=PASS
+SKIP uprobe: Permission denied
+SAMPLE mode=inert round=2 iterations=1000000 total_ns=202298343 ns_per_call=202.298 events=0 drops=0 missed=0 stops=0 attach_ms=5.497 insert_ms=0.000 remove_ms=0.000 detach_ms=5.383 status=PASS
+SAMPLE mode=entry round=2 iterations=1000000 total_ns=268881776 ns_per_call=268.882 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.547 insert_ms=2.824 remove_ms=3.265 detach_ms=12.735 status=PASS
+SAMPLE mode=return round=2 iterations=1000000 total_ns=354920749 ns_per_call=354.921 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.529 insert_ms=5.615 remove_ms=4.535 detach_ms=19.056 status=PASS
+SKIP uprobe: Permission denied
+SAMPLE mode=baseline round=2 iterations=1000000 total_ns=199050196 ns_per_call=199.050 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=entry round=3 iterations=1000000 total_ns=271519507 ns_per_call=271.520 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.559 insert_ms=2.811 remove_ms=3.285 detach_ms=11.661 status=PASS
+SAMPLE mode=return round=3 iterations=1000000 total_ns=352901161 ns_per_call=352.901 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.526 insert_ms=5.951 remove_ms=4.548 detach_ms=19.098 status=PASS
+SKIP uprobe: Permission denied
+SAMPLE mode=baseline round=3 iterations=1000000 total_ns=198970341 ns_per_call=198.970 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=3 iterations=1000000 total_ns=199043220 ns_per_call=199.043 events=0 drops=0 missed=0 stops=0 attach_ms=5.586 insert_ms=0.000 remove_ms=0.000 detach_ms=5.397 status=PASS
+SAMPLE mode=return round=4 iterations=1000000 total_ns=352088994 ns_per_call=352.089 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.580 insert_ms=6.138 remove_ms=5.584 detach_ms=20.103 status=PASS
+SKIP uprobe: Permission denied
+SAMPLE mode=baseline round=4 iterations=1000000 total_ns=198971080 ns_per_call=198.971 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=4 iterations=1000000 total_ns=198878384 ns_per_call=198.878 events=0 drops=0 missed=0 stops=0 attach_ms=5.519 insert_ms=0.000 remove_ms=0.000 detach_ms=5.372 status=PASS
+SAMPLE mode=entry round=4 iterations=1000000 total_ns=267634329 ns_per_call=267.634 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.519 insert_ms=2.786 remove_ms=3.272 detach_ms=11.685 status=PASS
+SKIP uprobe: Permission denied
+SAMPLE mode=baseline round=5 iterations=1000000 total_ns=199246712 ns_per_call=199.247 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 status=PASS
+SAMPLE mode=inert round=5 iterations=1000000 total_ns=198904452 ns_per_call=198.904 events=0 drops=0 missed=0 stops=0 attach_ms=5.567 insert_ms=0.000 remove_ms=0.000 detach_ms=5.385 status=PASS
+SAMPLE mode=entry round=5 iterations=1000000 total_ns=267737540 ns_per_call=267.738 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.567 insert_ms=2.812 remove_ms=3.265 detach_ms=12.716 status=PASS
+SAMPLE mode=return round=5 iterations=1000000 total_ns=355641040 ns_per_call=355.641 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.546 insert_ms=6.126 remove_ms=5.598 detach_ms=20.115 status=PASS
+Report: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-133152-543325/benchmark/benchmark.md
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 6.688

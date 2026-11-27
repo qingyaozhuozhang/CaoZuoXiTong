@@ -48,7 +48,8 @@ def read_optional(path):
 
 
 def identify_sources():
-    files = [Path(__file__), PROJECT / "Makefile"]
+    files = [PROJECT / "Makefile", ROOT / ".github/workflows/ci.yml"]
+    files.extend((ROOT / "scripts").glob("*.py"))
     for pattern in ("*.c", "*.h", "*.S", "*.py"):
         files.extend(PROJECT.glob(pattern))
     return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -77,14 +78,22 @@ def tool_version(command):
 
 def terminate_group(process):
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        # Give tracing tools a chance to disable/remove their private instance.
+        os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
         pass  # The child may have exited between timeout/interrupt and killpg.
-    captured, _ = process.communicate()
+    try:
+        captured, _ = process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        captured, _ = process.communicate()
     return captured
 
 
-def run_step(key, title, command, output, timeout=90, env=None):
+def run_step(key, title, command, output, timeout=90, env=None, announce_result=True):
     print(f"\n>>> {title}\n$ {shlex.join(map(str, command))}", flush=True)
     started, start = timestamp(), time.monotonic()
     process, captured, code = None, "", 1
@@ -115,7 +124,8 @@ def run_step(key, title, command, output, timeout=90, env=None):
         f"\nexit_code: {code}\nstatus: {status}\nelapsed_seconds: {elapsed}\n",
         encoding="utf-8")
     print(captured, end="" if captured.endswith("\n") else "\n")
-    print(f"[{status}] {title} ({elapsed:.3f}s)", flush=True)
+    if announce_result:
+        print(f"[{status}] {title} ({elapsed:.3f}s)", flush=True)
     return dict(id=key, title=title, status=status, exit_code=code,
                 command=list(map(str, command)), cwd=str(PROJECT),
                 started_at=started, elapsed_seconds=elapsed, log=log_name)
@@ -125,15 +135,50 @@ def skipped(key, title, reason):
     return dict(id=key, title=title, status="SKIP", reason=reason)
 
 
+def requirement_results(payload):
+    """Map requirements to executed checks without treating missing evidence as PASS."""
+    by_id = {step["id"]: step for step in payload["steps"]}
+    definitions = [
+        ("F1", "动态库用户态跳转", ["02-entry-return"]),
+        ("F2", "前六个整数类 ABI 参数", ["02-entry-return"]),
+        ("F3", "正常 ABI 返回及事件配对", ["02-entry-return"]),
+        ("F4", "指令恢复与会话映射回收", ["03-lifecycle"]),
+        ("F5", "安全点动态开关", ["03-lifecycle"]),
+        ("F6", "至少 16 个不同地址探针", ["04-multiprobe"]),
+        ("F7", "多线程、信号及安全点控制", ["05-threads"]),
+        ("A1", "同一提交的 x86_64 与 ARM64 原生结果", []),
+        ("A2", "单参数条件过滤", ["09-advanced"]),
+        ("A3", "CLOCK_MONOTONIC 用户态 / ftrace 真实事件合流", ["12-event-merge"]),
+        ("A4", "目标进程内受约束回调", ["10-callback"]),
+        ("A5", "安全点配置热更新", ["09-advanced", "10-callback"]),
+    ]
+    results = []
+    for name, scope, dependencies in definitions:
+        additional = {"F1": ["06-decoder", "08-aslr"], "F2": ["07-abi", "08-aslr"],
+                      "F3": ["07-abi", "08-aslr"], "F7": ["07-abi"],
+                      "A3": ["10-event-stream", "event-merge-validation"]}
+        dependencies = dependencies + [key for key in additional.get(name, []) if key in by_id]
+        checks = [by_id.get(key, {"status": "SKIP"}) for key in dependencies]
+        status = ("FAIL" if any(check["status"] == "FAIL" for check in checks) else
+                  "PASS" if checks and all(check["status"] == "PASS" for check in checks) else "SKIP")
+        results.append(dict(id=name, scope=scope, status=status, checks=dependencies,
+            reason="单架构报告；需结合另一架构同提交结果" if name == "A1" else
+                   "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"))
+    return results
+
+
 def write_report(output, payload):
+    payload["requirements"] = requirement_results(payload)
     (output / "summary.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     env = payload["environment"]
-    lines = ["# LUDP 演示执行报告", "",
+    lines = ["# LUDP 功能、正确性与性能验证报告", "",
              f"生成时间：{payload['finished_at']}（Asia/Shanghai）。", "",
              f"执行模式：`{payload['mode']}`；所选项目整体结果：**{payload['status']}**。", "",
              f"源码提交：`{env['git_commit']}`；工作树状态及源码 SHA-256 见 `summary.json`。", "",
              f"系统：`{env['platform']}`；Python：`{env['python']}`。", "",
+             "本报告汇总所选模式的功能、正确性和量化检查；getpid 性能基准及 A3 合流验证另附专项报告。", "",
+             "## 执行结果", "",
              "| 步骤 | 状态 | 耗时（秒） | 证据或原因 |",
              "|---|---|---:|---|"]
     for item in payload["steps"]:
@@ -143,15 +188,25 @@ def write_report(output, payload):
         evidence = evidence.replace("|", "\\|").replace("\n", " ")
         elapsed = f"{item['elapsed_seconds']:.3f}" if "elapsed_seconds" in item else "—"
         lines.append(f"| {item['title']} | {item['status']} | {elapsed} | {evidence} |")
+    lines += ["", "## 赛题功能覆盖", "",
+              "下表说明本次检查覆盖的能力。PASS 不扩大为任意参数类型、运行时或线程调度的保证。", "",
+              "| 条目 | 本次状态 | 验证范围 |", "|---|---|---|"]
+    for item in payload["requirements"]:
+        scope = item["scope"]
+        if item["id"] == "A1":
+            scope += "；本报告仅验证一种架构，需查看双架构 CI 汇总"
+        lines.append(f"| {item['id']} | {item['status']} | {scope} |")
     lines += ["", "## 结果解释", "",
               "- PASS 仅表示本次执行的相应检查通过；SKIP 表示未测，不计为已完成验收。",
               "- 快速模式不测量性能。完整模式按每轮 1,000,000 次 getpid 调用生成独立基准。",
               f"- 本次验证架构：`{env['machine']}`；A1 完整证据需同一提交的 x86_64 与 ARM64 两份原生运行结果。",
               "- 本目录的日志和 JSON 是运行证据；录屏用于讲解，不替代测量数据。"]
     if (output / "benchmark" / "benchmark.md").exists():
-        lines += ["", "[性能报告](benchmark/benchmark.md) · "
+        lines += ["", "[getpid 探针性能基准报告](benchmark/benchmark.md) · "
                   "[性能原始数据](benchmark/benchmark.json) · "
                   "[基准原始输出](benchmark/benchmark.log)"]
+    if (output / "event-merge" / "report.md").exists():
+        lines += ["", "[A3 用户态与内核事件合流验证报告](event-merge/report.md)"]
     (output / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -162,14 +217,15 @@ def main():
     mode.add_argument("--correctness-only", action="store_true", help="执行全部正确性验证和演示，不测量性能")
     parser.add_argument("--rounds", type=int, default=5, help="完整模式基准轮数，默认 5")
     parser.add_argument("--require-kernel", action="store_true", help="要求完整模式取得内核 uprobe 实测")
+    parser.add_argument("--require-merge", action="store_true", help="要求完整模式取得 A3 真实内核事件合流实测")
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts" / "demo",
                         help="结果父目录；每次新建独立子目录，保留旧结果")
     parser.add_argument("--jobs", type=int, default=2, help="并行构建数，默认 2")
     args = parser.parse_args()
     if not 1 <= args.rounds <= 100 or not 1 <= args.jobs <= 256:
         parser.error("--rounds 必须在 1..100；--jobs 必须在 1..256")
-    if args.require_kernel and not args.full:
-        parser.error("--require-kernel 必须与 --full 一起使用")
+    if (args.require_kernel or args.require_merge) and not args.full:
+        parser.error("--require-kernel / --require-merge 必须与 --full 一起使用")
 
     run_name = dt.datetime.now(TIMEZONE).strftime("%Y%m%d-%H%M%S-%f")
     output = args.output.resolve() / run_name
@@ -182,7 +238,7 @@ def main():
     build_env = os.environ.copy()
     for name in MAKE_CONTROL_ENV:
         build_env.pop(name, None)
-    payload = dict(schema_version=1, started_at=timestamp(),
+    payload = dict(schema_version=2, started_at=timestamp(),
                    mode="full" if args.full else "correctness-only" if args.correctness_only else "quick", status="FAIL", steps=[],
                    environment=dict(platform=platform.platform(), machine=platform.machine(),
                        python=platform.python_version(), git_commit="unavailable",
@@ -244,11 +300,23 @@ def main():
                 ("06-decoder", "指令解码边界", "instruction_validation"),
                 ("07-abi", "F1/F2/F3：ABI、递归、信号与缓冲区边界", "probe_abi_validation"),
                 ("08-api", "公共 API 与 ELF 契约", "api_contract_validation"),
+                ("08-aslr", "独立 exec、ASLR 与 PIE 符号定位", "aslr_pie_validation"),
                 ("09-advanced", "A2/A3/A5：过滤、事件格式与热更新", "probe_extensions_validation"),
                 ("10-callback", "A4：目标进程内回调", "callback_validation"),
+                ("10-event-stream", "A3：用户态事件导出与调用配对", "event_stream_demo"),
             ]
         for key, title, binary in suites:
-            result = run_step(key, title, [f"./{binary}"], output)
+            command = [f"./{binary}"]
+            if binary == "event_stream_demo":
+                command.append("--standalone")
+            result = run_step(key, title, command, output)
+            steps.append(result)
+            if result["exit_code"] in (130, 143):
+                return result["exit_code"]
+
+        if args.full or args.correctness_only:
+            result = run_step("event-merge-validation", "事件合流工具的离线正确性检查",
+                              [sys.executable, str(ROOT / "scripts/merge_events_validation.py")], output)
             steps.append(result)
             if result["exit_code"] in (130, 143):
                 return result["exit_code"]
@@ -268,7 +336,7 @@ def main():
             if data_path.exists():
                 data = json.loads(data_path.read_text(encoding="utf-8"))
                 samples = [sample for sample in data["samples"] if sample["mode"] == "uprobe"]
-                complete = len(samples) == args.rounds and all(s["status"] == "PASS" for s in samples)
+                complete = data.get("kernel_comparison_complete") is True
                 status = "PASS" if complete else "FAIL" if samples or args.require_kernel else "SKIP"
                 steps.append(dict(id="kernel-uprobe", title="内核 uprobe 实测", status=status,
                                   reason=f"有效样本 {len(samples)}/{args.rounds}；" +
@@ -283,6 +351,31 @@ def main():
                       "正确性检查失败，未执行性能测量")
             steps.append(skipped("benchmark", "百万次 getpid 基准与性能阈值", reason))
             steps.append(skipped("kernel-uprobe", "内核 uprobe 实测", reason))
+        if args.full and correct:
+            command = [sys.executable, str(ROOT / "scripts/event_merge_demo.py"),
+                       "--output", str(output / "event-merge")]
+            if args.require_merge:
+                command.append("--require-kernel")
+            result = run_step("12-event-merge", "A3：用户态与 ftrace 真实事件合流", command, output, 120,
+                              announce_result=False)
+            if result["status"] == "PASS":
+                merge_path = output / "event-merge" / "summary.json"
+                if not merge_path.exists():
+                    result.update(status="FAIL", reason="未生成合流验证摘要")
+                else:
+                    merge = json.loads(merge_path.read_text(encoding="utf-8"))
+                    merge_status = merge.get("status")
+                    if merge_status not in ("PASS", "SKIP") or (args.require_merge and merge_status != "PASS"):
+                        result.update(status="FAIL", reason="合流验证未满足要求")
+                    else:
+                        result.update(status=merge_status, reason=merge.get("reason", ""))
+            steps.append(result)
+            print(f"[{result['status']}] {result['title']} ({result['elapsed_seconds']:.3f}s)", flush=True)
+            if result["exit_code"] in (130, 143):
+                return result["exit_code"]
+        else:
+            steps.append(skipped("12-event-merge", "A3：用户态与 ftrace 真实事件合流",
+                                 "需要 --full 且所有前置正确性检查通过"))
         payload["status"] = "FAIL" if any(step["status"] == "FAIL" for step in steps) else "PASS"
         return 0 if payload["status"] == "PASS" else 1
     except KeyboardInterrupt as exc:

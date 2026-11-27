@@ -8,13 +8,16 @@
 | --- | --- | --- |
 | 线程管理 | 动态枚举 TID，保持元数据对应，逐线程记录停止状态并处理部分失败 | `thread_signal_validation` |
 | 信号处理 | 区分真实信号与 ptrace 事件停止，保存待转发信号，恢复时检查 PTRACE_CONT | 信号重入和暂停竞争用例 |
-| 远程系统调用 | TRACESYSGOOD 标识 syscall-stop，优先选择用户态安全线程，失败时尝试恢复寄存器 | 线程/futex/API 回归 |
-| ELF 与 ASLR | 精确识别主程序映射；通过 PT_DYNAMIC、DT_HASH/DT_GNU_HASH 回退查找符号 | `api_contract_validation` 及符号解析测试 |
+| 远程系统调用 | TRACESYSGOOD 标识 syscall-stop，优先选择用户态安全线程；短轮询后退避，按单调时钟限制总等待；失败时尝试恢复寄存器 | 线程/futex/API 回归与生命周期延迟基准 |
+| ELF 与 ASLR | 精确识别主程序映射；通过 PT_DYNAMIC、DT_HASH/DT_GNU_HASH 回退查找符号；独立 exec 验证重新随机化的布局 | `api_contract_validation`、`aslr_pie_validation` 的 8 次新映像 |
 | 接口契约 | 对空指针、非法参数和错误配置统一错误处理 | `api_contract_validation` |
 | 多探针 | 注册表与单地址入口链均采用 256 项容量 | `multiprobe_validation` 的 16 地址及 80 项链 |
 | A4 回调 | 静止后再验证可执行映射；x86 按 XSAVE/XCR0 保存向量状态，旧 CPU 回退 FXSAVE；ARM 保存 Q0–Q31、FPCR/FPSR | `callback_validation` 与两架构向量回归 |
 | 资源释放 | 记录本会话远程映射；失败项保留以便重试；在途返回/回调拒绝危险清理 | `probe_lifecycle_validation`、`callback_validation` |
+| 大映射回收 | 仅对确认未启用 seccomp 的目标的大事件环请求透明大页；内核拒绝建议时继续使用普通页；`LUDP_HUGEPAGES=0` 可关闭 | 四会话回收检查（含禁止 madvise 的 seccomp 目标）及连续 `cleanup_ms`，不改变 <10 ms 清理门禁 |
 | 数据复制 | tracer 批量读取；x86 批量写入可用 process_vm_writev，ARM 写入使用 /proc/pid/mem 或 ptrace 同步指令缓存 | 标准基准与 `auto_tune.py` |
+| A3 合流 | 单 CPU 目标真实采集；独立 tracefs instance 使用 mono 时钟；纳秒整数排序并保留原始来源 | `event_merge_demo.py` 原生采集与 `merge_events_validation.py` 离线检查分别判定 |
+| 量化门禁 | 核验样本完整性、事件计数和返回状态；连续计时覆盖 remove、入口字节校验及 detach | `benchmark_validation.py` 离线负向用例与 getpid 原生基准 |
 
 部分措施对应历史提交 `36538a4`、`8a5343c`；具体变更可通过 Git 历史查看。现有独立测试不等价全部故障注入或所有平台的正确性证明。
 
@@ -22,17 +25,19 @@
 
 - 根 README 按设计赛道十章组织；源码子目录 README 解释构建和文件职责。
 - 设计、API、测试、限制和演示集中到 `docs/`，移除重复或依赖临时分支的说明文件。
-- 2026-11-21 基准与调优文件迁入 `docs/archive/reports/2026-11-21/`，保留原始内容，不回写历史结论。
-- 新证据写入 `artifacts/`，每次 demo 使用独立目录。构建物、缓存与本地报告加入忽略规则。
+- `docs/archive/` 只保留固定提交的验证报告；已被完整双架构证据替代的早期开发快照从当前目录移除，通过 Git 历史追溯。
+- 本地新证据写入 `artifacts/`，每次 demo 使用独立目录。构建物、缓存与本地报告加入忽略规则。
 - 演示增加真实入口字节、参数和返回配对核验；失败通过退出码和报告显式呈现。
 - 一键演示强制重新构建，核验构建前后源码指纹；超时、SIGINT、SIGTERM 清理子进程组并保留失败证据。
-- CI 在 x86-64 和 ARM64 原生 Runner 上分别执行完整验证、五轮百万次基准及独立 UBSan 作业，上传失败日志与环境记录。
+- CI 在 x86-64 和 ARM64 原生 Runner 上分别执行完整验证、五轮百万次基准及独立 UBSan 作业，上传失败日志与环境记录。full 使用 `--require-kernel --require-merge`，必须取得内核 uprobe 对照和 A3 真实合流；UBSan 仅执行正确性与离线检查。
 - `test/` 功能包统一管理 GitHub 结果同步和同步逻辑离线验证；`python3 -m test sync` 将指定分支最新一轮运行同步至 `test/results/`，只替换结果子目录。下载失败保留原结果。
-- [2026-11-27 演示快照](archive/reports/2026-11-27-demo/report.md) 留存本轮实际验证结果；内核 uprobe 的权限跳过和超过 10 ms 的完整 detach 均如实保留。
+- [双架构验证归档](archive/README.md) 固定保留 `3ffd736` 的四个原生作业结果、环境及原始样本；内核 uprobe 的权限跳过和超过 10 ms 的完整 detach 均如实保留。
 
-删除的重复叙述可通过 Git 历史追溯；测试源码、调优程序和历史原始数据继续保留。
+删除的重复叙述和旧报告可通过 Git 历史追溯；测试源码、调优程序以及固定归档的原始数据继续保留。
 
 程序采用职责命名：验证程序使用 `_validation`、汇编状态哨兵使用 `_sentinel`；演示与基准分别为 `probe_demo`、`getpid_benchmark`，被探测函数库为 `libprobe_targets.so`。改名同步更新构建、脚本和正式文档，归档中的原始命令不作改写。
+
+报告按覆盖范围区分为“双架构 CI 验证汇总报告”“功能、正确性与性能验证报告”“getpid 探针性能基准报告”和“A3 用户态与内核事件合流验证报告”；各报告路径与阅读顺序见[测试规范](testing.md#8-报告名称与阅读顺序)。性能专项不代表 F1–F7、A1–A5 全部功能都完成验收。
 
 改名回归暴露了进阶验证程序的启动竞态：子进程尚未进入用户态安全点时，立即附加可能返回 `EBUSY`。该验证程序增加了有期限的就绪握手和附加错误输出，等待目标进入用户态阶段循环后再安装探针。
 
@@ -44,8 +49,8 @@ ARM64 增加固定宽度指令解码与重定位、用户态直接分支、AAPCS
 
 ## 4. 后续验证优先级
 
-1. 在赛场同等环境运行完整 demo，取得内核 uprobe 三组实测并录屏。
-2. 分别量化安全点协调、remove 与完整 detach，补全清理延迟口径。
-3. 对 A3 做真实 perf/ftrace 合流与跨 CPU、长会话时间误差验证。
-4. 扩展独立 exec/ASLR、多线程规模、向量状态与故障注入测试。
-5. 在 GitHub 原生 ARM64 Runner 完成 A1 验收，并按同一提交对照 x86-64 结果。
+1. 推送当前版本，在两架构原生 full / UBSan 作业取得新版报告；重点核查真实内核对照、A3 合流及完整清理门禁。
+2. 在指定验收机复测执行开销与生命周期延迟，保留安全点协调范围、透明大页策略和调度环境；不筛除慢样本。
+3. 在现有单 CPU 短会话合流基础上，扩展跨 CPU、长会话及其他 perf/kprobe 采集器验证。
+4. 继续扩展多线程规模、向量状态和故障注入覆盖；独立 exec/ASLR 已加入当前回归。
+5. 正式提交时归档与被测版本一致的完整证据。`3ffd736` 是历史基线，未执行新版独立 exec、真实 A3 合流和连续完整清理门禁，不能替代本次 CI。

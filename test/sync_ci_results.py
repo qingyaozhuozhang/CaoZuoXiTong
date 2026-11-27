@@ -290,12 +290,22 @@ def synchronize(api, repo, run):
                     "artifacts": downloaded, "missing_artifacts": missing, "warnings": warnings,
                     "jobs": jobs}
         (staged / "latest.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        lines = ["# 最新 GitHub Actions 验证结果", "", f"运行：[{run_id} / attempt {attempt}]({run['html_url']})",
+        lines = ["# LUDP 双架构 CI 验证汇总报告", "", f"运行：[{run_id} / attempt {attempt}]({run['html_url']})",
                  f"提交：`{run['head_sha']}`；分支：`{run['head_branch']}`；GitHub 结论：**{run['conclusion']}**。", "",
                  "本目录整体替换上一次结果；缺失报告不会沿用旧文件。", "", "| 作业 | 结果 |", "| --- | --- |"]
         for job in jobs:
             lines.append(f"| {job['name'].replace('|', '/')} | {job.get('conclusion') or job['status']} |")
+        lines.extend(["", "## 报告入口", "",
+                      "| 架构 | 验证配置 | 功能、正确性与性能验证报告 |",
+                      "|---|---|---|"])
+        for arch, profile in MATRIX:
+            reports = sorted((staged / arch / profile / "ci").glob("*/report.md"))
+            links = " · ".join(f"[查看报告]({path.relative_to(staged).as_posix()})" for path in reports)
+            lines.append(f"| {arch} | {profile} | {links or '缺失，不能视为通过'} |")
         lines.extend(["", "各架构目录保留上传内容：`ci/<运行时间>/report.md`、`summary.json`、原始日志与 `runner/environment.log`。"])
+        lines.extend(["", "专项报告：`benchmark/benchmark.md` 为 getpid 探针性能基准；"
+                      "`event-merge/report.md` 为 A3 用户态与内核事件合流验证。"
+                      "F1–F7、A1–A5 的检查范围与跳过项见各作业主报告，不能仅凭基准报告判断全部功能完成。"])
         if missing:
             lines.extend(["", "缺失或过期的报告（不能视为通过）：", "", *[f"- `{name}`" for name in missing]])
         if warnings:

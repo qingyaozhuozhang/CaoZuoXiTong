@@ -2,13 +2,17 @@
 #include "ludp_internal.h"
 #include "validation_arch.h"
 #include <errno.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
 #include <signal.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <sys/uio.h>
 #include <time.h>
@@ -164,9 +168,53 @@ fail:
     return -1;
 }
 
+static int seccomp_session(void)
+{
+    atomic_store(&ctl->step, 0);
+    atomic_store(&ctl->done, -1);
+    atomic_store(&ctl->entered, 0);
+    atomic_store(&ctl->hold, 0);
+    atomic_store(&ctl->quit, 0);
+    ctl->result = 0;
+    pid_t child = fork();
+    if (!child) {
+        /* If attach tries the optional hint, this child is killed instead of
+         * returning an errno. All required probe syscalls remain permitted. */
+        struct sock_filter instructions[] = {
+            BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+            BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_madvise, 0, 1),
+            BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
+            BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+        };
+        struct sock_fprog program = {
+            .len = (unsigned short)(sizeof instructions / sizeof instructions[0]),
+            .filter = instructions,
+        };
+        if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) ||
+            prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &program))
+            _exit(2);
+        run_child();
+    }
+    if (child < 0) return -1;
+    int failed = wait_value(&ctl->done, 0), step = 0, status = 0;
+    if (!failed && (setenv("LUDP_RING_CAP", "65536", 1) ||
+                    setenv("LUDP_HUGEPAGES", "1", 1) ||
+                    test_session(child, &step)))
+        failed = 1;
+    if (failed) kill(child, SIGKILL);
+    else atomic_store(&ctl->quit, 1);
+    pid_t waited;
+    do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    if (failed || waited != child || !WIFEXITED(status) || WEXITSTATUS(status)) {
+        fputs("FAIL seccomp-protected optional huge-page hint\n", stderr);
+        return -1;
+    }
+    puts("PASS seccomp: madvise would kill target; attach, probes and complete mapping cleanup succeed");
+    return 0;
+}
+
 int main(void)
 {
-    setenv("LUDP_RING_CAP", "1024", 1);
     ctl = mmap(NULL, sizeof *ctl, PROT_READ | PROT_WRITE,
                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (ctl == MAP_FAILED) return 1;
@@ -175,13 +223,30 @@ int main(void)
     if (!child) run_child();
     if (child < 0) return 1;
     int failed = wait_value(&ctl->done, 0), step = 0, status = 0;
-    for (int i = 0; !failed && i < 3; ++i) failed = test_session(child, &step);
+    /* An unrelated running child must time out without consuming a status.
+     * wait_stop uses a wall-clock deadline even when polling is backed off. */
+    if (!failed && (wait_stop(child, 2) != -1 || errno != ETIMEDOUT)) {
+        fputs("FAIL ptrace-stop timeout contract\n", stderr);
+        failed = 1;
+    }
+    /* Cover small ordinary mappings and both optional large-ring page paths.
+     * No assertion depends on the kernel granting the huge-page hint. */
+    for (int i = 0; !failed && i < 3; ++i) {
+        if (setenv("LUDP_RING_CAP", i ? "65536" : "1024", 1) ||
+            setenv("LUDP_HUGEPAGES", i == 2 ? "0" : "1", 1)) {
+            failed = 1;
+            break;
+        }
+        failed = test_session(child, &step);
+    }
     if (failed) kill(child, SIGKILL);
     else atomic_store(&ctl->quit, 1);
     pid_t waited;
     do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    if (failed || waited != child || !WIFEXITED(status) || WEXITSTATUS(status)) failed = 1;
+    if (!failed && seccomp_session()) failed = 1;
     munmap(ctl, sizeof *ctl);
-    if (failed || waited != child || !WIFEXITED(status) || WEXITSTATUS(status)) return 1;
-    puts("PASS F4/F5: three sessions, original bytes, mappings, switches and active return");
+    if (failed) return 1;
+    puts("PASS F4/F5: four sessions, original bytes, mappings, switches, active return, stop timeout and huge-page hint/fallback");
     return 0;
 }

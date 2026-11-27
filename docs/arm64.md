@@ -2,7 +2,7 @@
 
 本项目提供 Linux x86-64 与 ARM64 两套本机架构后端。编译器目标决定选用的指令处理、trampoline 和状态验证程序，公共 C API 与事件布局保持一致。控制程序与被跟踪进程必须具有相同架构。
 
-ARM64 后端已完成交叉编译、QEMU 系统环境下的功能回归与 UBSan 检查。原生 GitHub ARM64 结果尚待推送后取得；模拟执行的时间数据不作为赛题性能指标的验收依据。
+提交 `3ffd7368af3ac1ba1df4385ca4bf1f342b858903` 已在 GitHub 原生 x86_64 和 ARM64 Runner 上分别通过 full 与 UBSan 验证。运行编号为 `45946335169`，完整原始证据见 [验证报告归档](archive/README.md)。两架构内核 uprobe 对照均因权限不足跳过，完整 detach 延迟未满足 10 ms；模拟执行的时间数据不作为赛题性能指标的验收依据。
 
 ## 1. 架构差异与实现位置
 
@@ -34,7 +34,7 @@ python3 scripts/run_demo.py --correctness-only
 python3 scripts/run_demo.py --full --rounds 5
 ```
 
-第一条运行全部八个验证程序和 `probe_demo`；第二条增加五轮百万次 `getpid` 基准。每次强制重新构建并记录实际编译器、参数、平台和源码 SHA-256。无需手工为本机选择架构。
+第一条运行全部九个 C 验证程序、两个演示程序与合流工具离线检查；第二条增加五轮百万次 `getpid` 基准及真实事件合流。每次强制重新构建并记录实际编译器、参数、平台和源码 SHA-256。无需手工为本机选择架构。
 
 | 验证范围 | 对应程序或哨兵 |
 | --- | --- |
@@ -59,7 +59,7 @@ python3 scripts/run_demo.py --full --rounds 5
 | x86_64 / ubsan | `ubuntu-24.04` | 全部正确性与演示、UBSan |
 | arm64 / ubsan | `ubuntu-24.04-arm` | 相同 UBSan 流程，在原生 ARM64 环境执行 |
 
-工作流核验 `uname -m`，记录 CPU、页大小、编译器及 ptrace/perf 策略。一个作业失败不会取消其他架构；已有日志在失败时仍上传。性能门禁保持 `<1000 ns` 与插入/移除 `<10 ms`，不会因切换 ARM64 放宽阈值。完整 attach/detach 单独报告；内核 uprobe 不可用时明确记录 SKIP，严格三组对照需使用 `--require-kernel`。
+工作流核验 `uname -m`，记录 CPU、页大小、编译器、透明大页及 ptrace/perf 策略。一个作业失败不会取消其他架构；已有日志在失败时仍上传。新版门禁同时检查 `<1000 ns`、插入/移除 `<10 ms` 和 remove 至 detach 完成的完整清理 `<10 ms`。full 使用 `--require-kernel --require-merge`，必须取得真实内核 uprobe 对照与 ftrace 合流；sudo 权限限于临时 Runner 的验证命令，缺少内核设施仍会失败并保留日志。
 
 原生 Runner 标签依据 [GitHub 官方参考](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。共享 Runner 上的性能波动必须结合原始样本和环境解释；一次通过不代表所有 ARM64 设备均达标。
 
@@ -133,7 +133,7 @@ python3 -m test sync --wait --proxy http://127.0.0.1:7890
 
 每次完整下载到暂存目录后，仅替换旧 `test/results/`，保留包代码和说明。失败运行也替换旧结果，并保留失败原因；未上传的架构明确标记缺失，不沿用上一轮 PASS。重新运行部分作业时只保存当前 attempt 的产物，其他作业报告标记缺失。网络或下载异常时不替换已有结果。
 
-退出码 `0` 表示运行成功且四份产物齐全；`1` 表示已保存结果，但该轮失败、报告缺失或失败作业日志未能完整取得；`2` 表示同步未完成。结果目录中的生成文件由 Git 忽略，避免提交报告再次触发 CI。本地验证结果仍保存在 `artifacts/`，历史快照仍保存在 `docs/archive/`。
+退出码 `0` 表示运行成功且四份产物齐全；`1` 表示已保存结果，但该轮失败、报告缺失或失败作业日志未能完整取得；`2` 表示同步未完成。结果目录中的生成文件由 Git 忽略，避免提交报告再次触发 CI。本地验证结果仍保存在 `artifacts/`，固定提交的验证报告保存在 `docs/archive/`，不随同步覆盖。
 
 同步逻辑的离线回归可独立执行，不访问 GitHub，也不写入真实 `test/results/`：
 

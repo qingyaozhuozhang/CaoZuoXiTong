@@ -1,0 +1,21 @@
+started: 2026-11-27T13:31:53+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./probe_demo
+
+F1：pid=2899 libprobe_targets.so!six 地址=0x7fc18e805120 probe_id=1
+    原始入口=f3 0f 1e fa 90；探针入口=e9 db 1e ef ff（JMP rel32）
+F1：pid=2899 libprobe_targets.so!floating 地址=0x7fc18e805190 probe_id=2
+    原始入口=f3 0f 1e fa 90；探针入口=e9 7b 24 ef ff（JMP rel32）
+F2：six 六个整数参数 = [1, 2, 3, 4, 5, 6]，call_id=1
+F3：six 返回值（RAX）= 183，call_id=1
+入口：floating，call_id=2
+F3：floating 返回值（XMM0）= 4.00，call_id=2
+事件核验：six=1 入口/1 返回，floating=1 入口/1 返回，丢失=0，返回丢失=0，运行期 ptrace 停止=0
+清理：six 原始入口 16 字节校验通过。
+清理：floating 原始入口 16 字节校验通过。
+清理：会话已分离。
+F1–F3 演示：PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.025

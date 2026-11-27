@@ -208,12 +208,16 @@ int len = ludp_event_format_perf(&event, &probe,
 成功返回字符数，包含末尾换行但不包含 NUL；空间不足返回 `-1/ENOSPC`，事件类型或时间非法返回 `-1/EINVAL`。CPU 为负数时输出 0；comm 为空时使用 `ludp`，文本最多保留 16 个字符。probe 为空或其 ID 不匹配时使用名称 `probe`，`kernel_tid` 为 0 时文本以 pid 回退显示。
 
 ```text
-my-app           1234/1237 [003] 9123.456789012: ludp:target_entry: probe_id=7 arg0=0x2a arg1=0x0
+my-app           1234/1237 [003] 9123.456789012: ludp:target_entry: probe_id=7 call_id=9 arg0=0x2a arg1=0x0
 ```
 
-该示例仅说明格式。入口文本当前只导出前两个参数，返回文本导出 call_id 与 `retval`（RAX/X0）；需要全部参数或浮点返回时使用结构化事件。CPU 和缺失 TID 的回退值不代表实际采样值。输出不是 `perf.data`，也没有完成真实 perf/ftrace 事件合流验证。
+该示例仅说明格式。入口和返回文本均导出 call_id；入口文本只导出前两个参数，返回文本导出 `retval`（RAX/X0）。需要全部参数或浮点返回时使用结构化事件。CPU 和缺失 TID 的回退值不代表实际采样值，输出不是 `perf.data`。
 
 `monotonic_ns` 根据事件生成时的硬件计数估算（x86_64 为 TSC，ARM64 为 CNTVCT），在消费阶段计算；它不是消费时刻，也不是热路径直接读取的纳秒时间。当前没有周期重校准或误差界，跨 CPU、长时运行和合流分析需独立验证。
+
+仓库提供 [`event_stream_demo.c`](../Proj40/event_stream_demo.c) 与 [`event_merge_demo.py`](../scripts/event_merge_demo.py) 作为真实集成示例：将受控目标固定到已知 CPU，以独立 tracefs instance 的 mono 时钟采集同批 getpid 调用，再核对数量、线程、CPU、配对和时间关系。该路径要求有效 Linux TID，不使用未知身份回退来完成验收。固定 CPU 短会话的实测结果与离线解析检查分开，当前改进的双架构结果需重新运行 CI。
+
+[`merge_events.py`](../scripts/merge_events.py) 还可合并已导出的 perf-script 风格和 ftrace 文本。调用方必须先确认输入来自同一主机、同次启动及 CLOCK_MONOTONIC 时间域；工具不自动推断或修正时钟差。使用范围与严格验收命令见[测试规范](testing.md#55-报告门禁与-a3-专项验证)。
 
 ## 9. 容量和环境变量
 
@@ -224,8 +228,11 @@ my-app           1234/1237 [003] 9123.456789012: ludp:target_entry: probe_id=7 a
 | 在途返回记录 | 4096 | 会话共享；耗尽增加 return-missed |
 | `LUDP_RING_CAP` | 默认 `4194304` | 16 到 4194304 的 2 的幂；非法值使 attach 失败 |
 | `LUDP_BULK_IO` | 默认启用 | `0` 关闭大块 `process_vm_readv` 优先路径及 x86_64 的批量写优先路径；ARM64 写入始终保留指令缓存同步路径 |
+| `LUDP_HUGEPAGES` | 默认在未启用 seccomp 时请求大页建议 | `0` 关闭对至少 2 MiB 事件环的 `MADV_HUGEPAGE` 建议；内核拒绝建议时保留普通页，容量与接口语义不变 |
 
 例如在低事件量的功能演示中可使用 `LUDP_RING_CAP=65536`。百万次入口+返回基准在运行后统一消费时需要容纳两百万条事件，不应直接套用小环配置；否则测量会包含大量丢弃事件，不能与完整采集结果比较。
+
+透明大页是内核可选优化，不保证实际采用，也不绕过完整清理门禁。对比普通页路径可在独立运行中设置 `LUDP_HUGEPAGES=0`；报告会记录配置与内核策略。仅当所有受控暂停线程均可确认 `Seccomp: 0` 时才发起建议；启用过滤或状态未知则跳过，避免 KILL/TRAP 策略影响目标。内核以 errno 拒绝时可使用普通页，但注入或寄存器恢复失败仍使附加失败。
 
 ## 10. 常见失败含义
 

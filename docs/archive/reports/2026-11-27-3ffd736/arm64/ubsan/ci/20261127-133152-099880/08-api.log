@@ -1,0 +1,9 @@
+started: 2026-11-27T13:31:55+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./api_contract_validation
+
+public API/ELF contract: PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.016

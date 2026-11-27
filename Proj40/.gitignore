@@ -13,5 +13,7 @@ __pycache__/
 /thread_signal_validation
 /probe_demo
 /getpid_benchmark
+/event_stream_demo
+/aslr_pie_validation
 /.ludp_tuning.env
 /reports/

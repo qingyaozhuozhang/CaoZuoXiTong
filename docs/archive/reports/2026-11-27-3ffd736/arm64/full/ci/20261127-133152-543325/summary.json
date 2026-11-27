@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-11-27T13:31:52+08:00",
+  "mode": "full",
+  "status": "PASS",
+  "steps": [
+    {
+      "id": "preflight",
+      "title": "平台与工具检查",
+      "status": "PASS",
+      "reason": "Linux aarch64 构建工具可用"
+    },
+    {
+      "id": "01-build",
+      "title": "重新构建库、验证程序与演示",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "make",
+        "-B",
+        "-j2",
+        "all",
+        "CC=cc",
+        "AR=ar",
+        "CFLAGS=-O2 -g -Wall -Wextra -Werror -fno-strict-aliasing -pthread",
+        "LDFLAGS=-pthread"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:52+08:00",
+      "elapsed_seconds": 1.77,
+      "log": "01-build.log"
+    },
+    {
+      "id": "source-integrity",
+      "title": "构建前后源码一致性",
+      "status": "PASS",
+      "reason": "源码 SHA-256 一致"
+    },
+    {
+      "id": "02-entry-return",
+      "title": "F1/F2/F3：入口跳转、六参数与返回值",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_demo"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.024,
+      "log": "02-entry-return.log"
+    },
+    {
+      "id": "03-lifecycle",
+      "title": "F4/F5：恢复指令、回收映射与动态开关",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_lifecycle_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.217,
+      "log": "03-lifecycle.log"
+    },
+    {
+      "id": "04-multiprobe",
+      "title": "F6：16 个地址与同址多探针",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./multiprobe_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.041,
+      "log": "04-multiprobe.log"
+    },
+    {
+      "id": "05-threads",
+      "title": "F7：多线程与信号交付",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./thread_signal_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.085,
+      "log": "05-threads.log"
+    },
+    {
+      "id": "06-decoder",
+      "title": "指令解码边界",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./instruction_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.001,
+      "log": "06-decoder.log"
+    },
+    {
+      "id": "07-abi",
+      "title": "F1/F2/F3：ABI、递归、信号与缓冲区边界",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_abi_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.26,
+      "log": "07-abi.log"
+    },
+    {
+      "id": "08-api",
+      "title": "公共 API 与 ELF 契约",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./api_contract_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.014,
+      "log": "08-api.log"
+    },
+    {
+      "id": "09-advanced",
+      "title": "A2/A3/A5：过滤、事件格式与热更新",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_extensions_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:54+08:00",
+      "elapsed_seconds": 0.032,
+      "log": "09-advanced.log"
+    },
+    {
+      "id": "10-callback",
+      "title": "A4：目标进程内回调",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./callback_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:55+08:00",
+      "elapsed_seconds": 0.035,
+      "log": "10-callback.log"
+    },
+    {
+      "id": "11-benchmark",
+      "title": "百万次 getpid 基准与性能阈值",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/python3",
+        "benchmark.py",
+        "--iterations",
+        "1000000",
+        "--rounds",
+        "5",
+        "--output",
+        "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-133152-543325/benchmark"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T13:31:55+08:00",
+      "elapsed_seconds": 6.688,
+      "log": "11-benchmark.log"
+    },
+    {
+      "id": "kernel-uprobe",
+      "title": "内核 uprobe 实测",
+      "status": "SKIP",
+      "reason": "有效样本 0/5；SKIP uprobe: Permission denied",
+      "log": "benchmark/benchmark.log"
+    }
+  ],
+  "environment": {
+    "platform": "Linux-7.0.0-1017-azure-aarch64-with-glibc2.39",
+    "machine": "aarch64",
+    "python": "3.12.3",
+    "git_commit": "3ffd7368af3ac1ba1df4385ca4bf1f342b858903",
+    "build_variables": {
+      "CC": "cc",
+      "AR": "ar",
+      "CFLAGS": "-O2 -g -Wall -Wextra -Werror -fno-strict-aliasing -pthread",
+      "LDFLAGS": "-pthread"
+    },
+    "input_variables": {
+      "CFLAGS": "-O2 -g -Wall -Wextra -Werror -fno-strict-aliasing -pthread"
+    },
+    "ignored_make_control_variables": [],
+    "cpu": "0xd49",
+    "affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "ptrace_scope": "1",
+    "perf_event_paranoid": "4",
+    "uprobe_pmu_type": "9",
+    "git_status": "",
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "make": "GNU Make 4.3"
+  },
+  "source_sha256": {
+    "Proj40/Makefile": "fdd63de0e774ce2704f3252640378eb00dd75e69cc290e57a031bff22d579c91",
+    "Proj40/aarch64.c": "fd06bbe02753ac6c53045fbcc7840e06fb559c8a8ede54118814042ede23c05c",
+    "Proj40/aarch64_trampoline.S": "1d828e856db0a23f1bd8746c6db0521ac13fcf95dd1dbfc3288e8cb51f46157e",
+    "Proj40/abi_state_aarch64.S": "ff0140d20bed4f019c4f52010c64d11f05e12845f830c14df55ead8e9ca2ad48",
+    "Proj40/abi_state_sentinel.S": "be9c517c02bed88c41a38c3f985812a507e55f5cecbf374c13e3879b0d92807b",
+    "Proj40/api_contract_validation.c": "501657cf5822360a3c8f81d4724e94fe68283e07fff6622aa31b3753384b9c76",
+    "Proj40/auto_tune.py": "25ff42f35066cd076fe35ad3ca05d1d3293d361e95d8a5c0fc608f77fd16e6a5",
+    "Proj40/avx_state_sentinel.S": "3485e3b8c9a824584dbf10ad3962aaf228b8cee6ff7259a5e7bf1100d0039d88",
+    "Proj40/benchmark.py": "140c8f6273c014b6591737b228be5404ba6581303e69c0426812d534082fd307",
+    "Proj40/callback_validation.c": "36576354a282c90118c5cc96a7f0bb90dea66977d2a7a7342955b5577221c283",
+    "Proj40/elf.c": "26d0e3d75656a983ad0b1ebfa6a2169b86d45f49aa05171160f3ed1e0166c6de",
+    "Proj40/evaluate.py": "dc903a0ca763cda56836aee60153102082e8f31f5dd29c221e663df00e15a0ed",
+    "Proj40/getpid_benchmark.c": "e54fb15f66c8935f25eb953ae1734f3ac24befdb4e5486f75cb56cc750b1e641",
+    "Proj40/instruction_validation.c": "984969e35fec5fb164ad316408f3a627ae62b93899aaabb1b911205b6b738cd0",
+    "Proj40/ludp.c": "ca4315d8219c6d5dc4f847547b07a624641435d5dd30cf6df9272e274df4c9ee",
+    "Proj40/ludp.h": "e8c96021fe7bba75fe51511d9c48f0c3d26a66044c631154543b4b73ed4d18d4",
+    "Proj40/ludp_internal.h": "b94df6890377ddb3c0b91d37dde4ce724f9358ad365c18d6fd898a9305a9bbda",
+    "Proj40/multiprobe_validation.c": "ab6f8fbeaad5a97b8de986f522353a9a7ea6261312535d2bbb542eadbfbd2066",
+    "Proj40/probe_abi_validation.c": "3de6f91588f8156083cea0fb264b4c45cd6dbd4c17be637ce01510a815f30c5e",
+    "Proj40/probe_demo.c": "108b2ca44e599673e1e660005b86cab66a16728e407d1925f8c7a75fa8965479",
+    "Proj40/probe_extensions_validation.c": "b54fa849e90e754cd3251d252662adc290dc01da3be96eb780979bfd2c96866c",
+    "Proj40/probe_lifecycle_validation.c": "59b4b18c47993a5fbea7806ae7a420483a61bf91c3ec3b3a3821927ab7967cb2",
+    "Proj40/probe_targets.c": "dfcf5312531c4c2ca27f7cd6c2a8ab4c4df5c4763161a19f2c498c2f37fed51c",
+    "Proj40/probes.c": "dbe449f1fea744320720fa186097611581967e77aa1f22b4bf4fa620d59d943d",
+    "Proj40/simd_state_aarch64.S": "68904a196d89e04c610cdc784143fec5b35d2ca4438194294074e01f0ca3cb2e",
+    "Proj40/thread_signal_validation.c": "7471b45d717cbb1a51a4244eaea394fd41f188ed3e7a4cf9f0c845fabfeee88f",
+    "Proj40/trampoline.S": "a88774ce0060a58724dd74735dc102f3d61912849061823527fe189c3812b948",
+    "Proj40/validation_arch.h": "de3b01d7d5a45196f7f5a464740eaf30a9751efde4bd9bf68ff32ca2694edfa9",
+    "Proj40/x86dec.c": "8bf9c89ec5addd17168b70bcf7025418af7fc7aa914abd1b72bc10db660e5dee",
+    "scripts/run_demo.py": "094d7c3f03d4c819431ed1f7fd7937e75aa8a4f13d00418e9360b4333cedc49d"
+  },
+  "source_sha256_after_build": {
+    "Proj40/Makefile": "fdd63de0e774ce2704f3252640378eb00dd75e69cc290e57a031bff22d579c91",
+    "Proj40/aarch64.c": "fd06bbe02753ac6c53045fbcc7840e06fb559c8a8ede54118814042ede23c05c",
+    "Proj40/aarch64_trampoline.S": "1d828e856db0a23f1bd8746c6db0521ac13fcf95dd1dbfc3288e8cb51f46157e",
+    "Proj40/abi_state_aarch64.S": "ff0140d20bed4f019c4f52010c64d11f05e12845f830c14df55ead8e9ca2ad48",
+    "Proj40/abi_state_sentinel.S": "be9c517c02bed88c41a38c3f985812a507e55f5cecbf374c13e3879b0d92807b",
+    "Proj40/api_contract_validation.c": "501657cf5822360a3c8f81d4724e94fe68283e07fff6622aa31b3753384b9c76",
+    "Proj40/auto_tune.py": "25ff42f35066cd076fe35ad3ca05d1d3293d361e95d8a5c0fc608f77fd16e6a5",
+    "Proj40/avx_state_sentinel.S": "3485e3b8c9a824584dbf10ad3962aaf228b8cee6ff7259a5e7bf1100d0039d88",
+    "Proj40/benchmark.py": "140c8f6273c014b6591737b228be5404ba6581303e69c0426812d534082fd307",
+    "Proj40/callback_validation.c": "36576354a282c90118c5cc96a7f0bb90dea66977d2a7a7342955b5577221c283",
+    "Proj40/elf.c": "26d0e3d75656a983ad0b1ebfa6a2169b86d45f49aa05171160f3ed1e0166c6de",
+    "Proj40/evaluate.py": "dc903a0ca763cda56836aee60153102082e8f31f5dd29c221e663df00e15a0ed",
+    "Proj40/getpid_benchmark.c": "e54fb15f66c8935f25eb953ae1734f3ac24befdb4e5486f75cb56cc750b1e641",
+    "Proj40/instruction_validation.c": "984969e35fec5fb164ad316408f3a627ae62b93899aaabb1b911205b6b738cd0",
+    "Proj40/ludp.c": "ca4315d8219c6d5dc4f847547b07a624641435d5dd30cf6df9272e274df4c9ee",
+    "Proj40/ludp.h": "e8c96021fe7bba75fe51511d9c48f0c3d26a66044c631154543b4b73ed4d18d4",
+    "Proj40/ludp_internal.h": "b94df6890377ddb3c0b91d37dde4ce724f9358ad365c18d6fd898a9305a9bbda",
+    "Proj40/multiprobe_validation.c": "ab6f8fbeaad5a97b8de986f522353a9a7ea6261312535d2bbb542eadbfbd2066",
+    "Proj40/probe_abi_validation.c": "3de6f91588f8156083cea0fb264b4c45cd6dbd4c17be637ce01510a815f30c5e",
+    "Proj40/probe_demo.c": "108b2ca44e599673e1e660005b86cab66a16728e407d1925f8c7a75fa8965479",
+    "Proj40/probe_extensions_validation.c": "b54fa849e90e754cd3251d252662adc290dc01da3be96eb780979bfd2c96866c",
+    "Proj40/probe_lifecycle_validation.c": "59b4b18c47993a5fbea7806ae7a420483a61bf91c3ec3b3a3821927ab7967cb2",
+    "Proj40/probe_targets.c": "dfcf5312531c4c2ca27f7cd6c2a8ab4c4df5c4763161a19f2c498c2f37fed51c",
+    "Proj40/probes.c": "dbe449f1fea744320720fa186097611581967e77aa1f22b4bf4fa620d59d943d",
+    "Proj40/simd_state_aarch64.S": "68904a196d89e04c610cdc784143fec5b35d2ca4438194294074e01f0ca3cb2e",
+    "Proj40/thread_signal_validation.c": "7471b45d717cbb1a51a4244eaea394fd41f188ed3e7a4cf9f0c845fabfeee88f",
+    "Proj40/trampoline.S": "a88774ce0060a58724dd74735dc102f3d61912849061823527fe189c3812b948",
+    "Proj40/validation_arch.h": "de3b01d7d5a45196f7f5a464740eaf30a9751efde4bd9bf68ff32ca2694edfa9",
+    "Proj40/x86dec.c": "8bf9c89ec5addd17168b70bcf7025418af7fc7aa914abd1b72bc10db660e5dee",
+    "scripts/run_demo.py": "094d7c3f03d4c819431ed1f7fd7937e75aa8a4f13d00418e9360b4333cedc49d"
+  },
+  "finished_at": "2026-11-27T13:32:01+08:00"
+}

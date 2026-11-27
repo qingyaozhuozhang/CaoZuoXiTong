@@ -22,6 +22,8 @@ python3 -m test sync --branch test --wait --proxy http://127.0.0.1:7890
 
 完成后查看 **[结果汇总](results/report.md)**；详细数据分别位于 `results/x86_64/` 和 `results/arm64/`。无需执行 `git pull`。
 
+汇总报告提供每个作业的主报告入口；主报告再链接 getpid 性能基准和 A3 合流专项报告。新版 full 要求真实内核 uprobe、A3 合流及完整清理达标，失败或缺失项会如实保留；UBSan 只验证正确性，不采集性能或真实合流。
+
 每次同步只替换 `results/`，保留最新一轮结果，包内代码和文档不受影响。失败运行也会保存；网络或下载失败时保留旧结果。下载内容已由 `.gitignore` 忽略。
 
 <details>
@@ -53,7 +55,7 @@ test/
 ├── sync_ci_results.py          GitHub 请求、产物下载与报告汇总
 ├── ci_results_validation.py    同步逻辑离线回归
 └── results/                    首次成功同步后生成，仅保留最新一轮
-    ├── report.md               作业结论、缺失项与日志入口
+    ├── report.md               双架构 CI 验证汇总、缺失项与报告入口
     ├── latest.json             提交、分支、run ID、attempt 和产物清单
     ├── x86_64/                 full / ubsan 原始报告与环境
     ├── arm64/                  full / ubsan 原始报告与环境

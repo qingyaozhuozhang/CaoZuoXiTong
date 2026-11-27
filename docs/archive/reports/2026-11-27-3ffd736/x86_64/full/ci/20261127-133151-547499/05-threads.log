@@ -1,0 +1,11 @@
+started: 2026-11-27T13:31:54+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./thread_signal_validation
+
+multithread active leader: PASS
+multithread futex-blocked leader: PASS
+signal delivery across quiesce: PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.092

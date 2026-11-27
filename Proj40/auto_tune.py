@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def main():
-    parser = argparse.ArgumentParser(description="F1–F3 自动参数调优：批量远程内存复制")
+    parser = argparse.ArgumentParser(description="远程内存复制路径自动调优")
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument("--iterations", type=int, default=1_000_000)
     parser.add_argument("--output", type=Path, default=ROOT.parent / "artifacts" / "tuning")
@@ -56,21 +56,23 @@ def main():
     # 小于 0.2ms 的差异视为噪声，优先采用 process_vm 快速路径。
     if "1" in candidates and results["1"]["return_insert_median_ms"] <= results[best]["return_insert_median_ms"] + 0.2:
         best = "1"
-    lines = ["# F1–F3 自动调优报告", "", f"基准：每轮 {args.iterations:,} 次 getpid，共 {args.rounds} 轮。", "",
-             "| 测试路径 | 正确性与阈值 | F3 插入延迟中位数(ms) | F1 开销(ns) | F3 开销(ns) |",
+    lines = ["# 远程内存复制路径调优报告", "", f"基准：每轮 {args.iterations:,} 次 getpid，共 {args.rounds} 轮。", "",
+             "| 测试路径 | 正确性与阈值 | 返回探针插入延迟中位数(ms) | 入口开销(ns) | 入口与返回开销(ns) |",
              "|---|---|---:|---:|---:|"]
     for val in ("0", "1"):
         x = results[val]
-        lines.append(f"| {x['name']} | {'通过' if x['valid'] else '失败'} | {x['return_insert_median_ms']:.3f} | {x['entry_overhead_ns']:.3f} | {x['return_overhead_ns']:.3f} |")
+        values = ['未测' if x[key] is None else f'{x[key]:.3f}' for key in
+                  ('return_insert_median_ms', 'entry_overhead_ns', 'return_overhead_ns')]
+        lines.append(f"| {x['name']} | {'通过' if x['valid'] else '失败'} | " + ' | '.join(values) + ' |')
     lines += ["", f"**建议：`LUDP_BULK_IO={best}`。**", "",
               "参数只影响 tracer 侧大块跨进程内存读写；探针触发路径的汇编代码相同。",
               "该选择仅针对本机当次采样，不保证迁移到另一台机器后仍最优。", ""]
-    (out / "自动调优.md").write_text("\n".join(lines), encoding="utf-8")
-    (out / "自动调优.json").write_text(json.dumps({"recommended": best, "candidates": results}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (out / "memory_io_tuning.md").write_text("\n".join(lines), encoding="utf-8")
+    (out / "memory_io_tuning.json").write_text(json.dumps({"recommended": best, "candidates": results}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if args.apply:
         (ROOT / ".ludp_tuning.env").write_text(f"export LUDP_BULK_IO={best}\n", encoding="utf-8")
         print("已写入 .ludp_tuning.env，可执行：source .ludp_tuning.env")
-    print(f"推荐配置：LUDP_BULK_IO={best}；完整报告：{out / '自动调优.md'}")
+    print(f"推荐配置：LUDP_BULK_IO={best}；完整报告：{out / 'memory_io_tuning.md'}")
     return 0
 
 

@@ -1,0 +1,34 @@
+started: 2026-11-27T15:31:17+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: /usr/bin/python3 benchmark.py --iterations 1000000 --rounds 5 --output /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-153059-814545/benchmark --require-kernel
+
+SAMPLE mode=baseline round=1 iterations=1000000 total_ns=103825909 ns_per_call=103.826 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=inert round=1 iterations=1000000 total_ns=104548692 ns_per_call=104.549 events=0 drops=0 missed=0 stops=0 attach_ms=5.959 insert_ms=0.000 remove_ms=0.000 detach_ms=0.449 cleanup_ms=0.449 status=PASS
+SAMPLE mode=entry round=1 iterations=1000000 total_ns=165176457 ns_per_call=165.176 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.531 insert_ms=0.420 remove_ms=0.065 detach_ms=1.469 cleanup_ms=1.535 status=PASS
+SAMPLE mode=return round=1 iterations=1000000 total_ns=229002230 ns_per_call=229.002 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.973 insert_ms=1.234 remove_ms=0.497 detach_ms=1.134 cleanup_ms=1.633 status=PASS
+SAMPLE mode=uprobe round=1 iterations=1000000 total_ns=4391500359 ns_per_call=4391.500 events=1000000 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=inert round=2 iterations=1000000 total_ns=103248032 ns_per_call=103.248 events=0 drops=0 missed=0 stops=0 attach_ms=6.007 insert_ms=0.000 remove_ms=0.000 detach_ms=0.658 cleanup_ms=0.658 status=PASS
+SAMPLE mode=entry round=2 iterations=1000000 total_ns=163375243 ns_per_call=163.375 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.841 insert_ms=0.443 remove_ms=0.058 detach_ms=1.049 cleanup_ms=1.108 status=PASS
+SAMPLE mode=return round=2 iterations=1000000 total_ns=227538386 ns_per_call=227.538 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.828 insert_ms=1.340 remove_ms=0.850 detach_ms=1.266 cleanup_ms=2.119 status=PASS
+SAMPLE mode=uprobe round=2 iterations=1000000 total_ns=4392121075 ns_per_call=4392.121 events=1000000 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=baseline round=2 iterations=1000000 total_ns=104522376 ns_per_call=104.522 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=entry round=3 iterations=1000000 total_ns=163983371 ns_per_call=163.983 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.925 insert_ms=0.416 remove_ms=0.068 detach_ms=1.042 cleanup_ms=1.112 status=PASS
+SAMPLE mode=return round=3 iterations=1000000 total_ns=228693649 ns_per_call=228.694 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.703 insert_ms=1.590 remove_ms=0.511 detach_ms=1.130 cleanup_ms=1.643 status=PASS
+SAMPLE mode=uprobe round=3 iterations=1000000 total_ns=4360037043 ns_per_call=4360.037 events=1000000 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=baseline round=3 iterations=1000000 total_ns=103719153 ns_per_call=103.719 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=inert round=3 iterations=1000000 total_ns=104332680 ns_per_call=104.333 events=0 drops=0 missed=0 stops=0 attach_ms=5.907 insert_ms=0.000 remove_ms=0.000 detach_ms=0.443 cleanup_ms=0.443 status=PASS
+SAMPLE mode=return round=4 iterations=1000000 total_ns=230932540 ns_per_call=230.933 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.866 insert_ms=1.486 remove_ms=0.514 detach_ms=1.172 cleanup_ms=1.688 status=PASS
+SAMPLE mode=uprobe round=4 iterations=1000000 total_ns=4324783064 ns_per_call=4324.783 events=1000000 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=baseline round=4 iterations=1000000 total_ns=103447998 ns_per_call=103.448 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=inert round=4 iterations=1000000 total_ns=103620737 ns_per_call=103.621 events=0 drops=0 missed=0 stops=0 attach_ms=5.983 insert_ms=0.000 remove_ms=0.000 detach_ms=0.506 cleanup_ms=0.506 status=PASS
+SAMPLE mode=entry round=4 iterations=1000000 total_ns=164356986 ns_per_call=164.357 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.981 insert_ms=0.425 remove_ms=0.059 detach_ms=0.933 cleanup_ms=0.994 status=PASS
+SAMPLE mode=uprobe round=5 iterations=1000000 total_ns=4369574591 ns_per_call=4369.575 events=1000000 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=baseline round=5 iterations=1000000 total_ns=103125794 ns_per_call=103.126 events=0 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS
+SAMPLE mode=inert round=5 iterations=1000000 total_ns=103394125 ns_per_call=103.394 events=0 drops=0 missed=0 stops=0 attach_ms=5.901 insert_ms=0.000 remove_ms=0.000 detach_ms=0.989 cleanup_ms=0.989 status=PASS
+SAMPLE mode=entry round=5 iterations=1000000 total_ns=162940333 ns_per_call=162.940 events=1000000 drops=0 missed=0 stops=0 attach_ms=5.849 insert_ms=0.395 remove_ms=0.059 detach_ms=0.842 cleanup_ms=0.902 status=PASS
+SAMPLE mode=return round=5 iterations=1000000 total_ns=226104645 ns_per_call=226.105 events=2000000 drops=0 missed=0 stops=0 attach_ms=5.686 insert_ms=1.450 remove_ms=0.862 detach_ms=1.600 cleanup_ms=2.464 status=PASS
+Report: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-153059-814545/benchmark/benchmark.md
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 25.702

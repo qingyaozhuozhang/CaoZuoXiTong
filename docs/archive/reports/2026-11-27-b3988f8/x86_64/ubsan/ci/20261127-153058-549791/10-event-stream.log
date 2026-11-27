@@ -1,0 +1,26 @@
+started: 2026-11-27T15:31:07+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./event_stream_demo --standalone
+
+READY pid=2337 cpu=0 calls=8
+ludp-getpid      2337/2337 [000] 254.099551183: ludp:getpid_entry: probe_id=1 call_id=1 arg0=0x0 arg1=0x80
+ludp-getpid      2337/2337 [000] 254.099760621: ludp:getpid_return: probe_id=1 call_id=1 retval=0x921
+ludp-getpid      2337/2337 [000] 254.100821288: ludp:getpid_entry: probe_id=1 call_id=2 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.100821635: ludp:getpid_return: probe_id=1 call_id=2 retval=0x921
+ludp-getpid      2337/2337 [000] 254.101884450: ludp:getpid_entry: probe_id=1 call_id=3 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.101884641: ludp:getpid_return: probe_id=1 call_id=3 retval=0x921
+ludp-getpid      2337/2337 [000] 254.102948413: ludp:getpid_entry: probe_id=1 call_id=4 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.102948737: ludp:getpid_return: probe_id=1 call_id=4 retval=0x921
+ludp-getpid      2337/2337 [000] 254.104015812: ludp:getpid_entry: probe_id=1 call_id=5 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.104017085: ludp:getpid_return: probe_id=1 call_id=5 retval=0x921
+ludp-getpid      2337/2337 [000] 254.105078051: ludp:getpid_entry: probe_id=1 call_id=6 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.105078371: ludp:getpid_return: probe_id=1 call_id=6 retval=0x921
+ludp-getpid      2337/2337 [000] 254.106141063: ludp:getpid_entry: probe_id=1 call_id=7 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.106141298: ludp:getpid_return: probe_id=1 call_id=7 retval=0x921
+ludp-getpid      2337/2337 [000] 254.107204080: ludp:getpid_entry: probe_id=1 call_id=8 arg0=0x0 arg1=0x0
+ludp-getpid      2337/2337 [000] 254.107204273: ludp:getpid_return: probe_id=1 call_id=8 retval=0x921
+SUMMARY {"pid":2337,"cpu":0,"calls":8,"events":16,"begin_ns":254099549999,"end_ns":254108291362,"overflow":0,"return_missed":0,"runtime_stops":0}
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.017

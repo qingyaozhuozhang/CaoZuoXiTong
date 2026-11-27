@@ -1,0 +1,10 @@
+started: 2026-11-27T15:31:17+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./probe_lifecycle_validation
+
+PASS seccomp: madvise would kill target; attach, probes and complete mapping cleanup succeed
+PASS F4/F5: four sessions, original bytes, mappings, switches, active return, stop timeout and huge-page hint/fallback
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.113

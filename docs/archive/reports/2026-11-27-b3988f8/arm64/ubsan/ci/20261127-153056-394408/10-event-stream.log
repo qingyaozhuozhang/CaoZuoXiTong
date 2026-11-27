@@ -1,0 +1,26 @@
+started: 2026-11-27T15:30:59+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./event_stream_demo --standalone
+
+READY pid=2378 cpu=0 calls=8
+ludp-getpid      2378/2378 [000] 91.945063944: ludp:getpid_entry: probe_id=1 call_id=1 arg0=0x1 arg1=0x80
+ludp-getpid      2378/2378 [000] 91.945141632: ludp:getpid_return: probe_id=1 call_id=1 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.946204952: ludp:getpid_entry: probe_id=1 call_id=2 arg0=0x1 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.946205272: ludp:getpid_return: probe_id=1 call_id=2 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.947260680: ludp:getpid_entry: probe_id=1 call_id=3 arg0=0x2 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.947260976: ludp:getpid_return: probe_id=1 call_id=3 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.948315984: ludp:getpid_entry: probe_id=1 call_id=4 arg0=0x3 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.948316832: ludp:getpid_return: probe_id=1 call_id=4 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.949372712: ludp:getpid_entry: probe_id=1 call_id=5 arg0=0x4 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.949373024: ludp:getpid_return: probe_id=1 call_id=5 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.950428368: ludp:getpid_entry: probe_id=1 call_id=6 arg0=0x5 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.950428664: ludp:getpid_return: probe_id=1 call_id=6 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.951483824: ludp:getpid_entry: probe_id=1 call_id=7 arg0=0x6 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.951484112: ludp:getpid_return: probe_id=1 call_id=7 retval=0x94a
+ludp-getpid      2378/2378 [000] 91.952539112: ludp:getpid_entry: probe_id=1 call_id=8 arg0=0x7 arg1=0xff49e9e2bb50
+ludp-getpid      2378/2378 [000] 91.952539400: ludp:getpid_return: probe_id=1 call_id=8 retval=0x94a
+SUMMARY {"pid":2378,"cpu":0,"calls":8,"events":16,"begin_ns":91945063058,"end_ns":91953714532,"overflow":0,"return_missed":0,"runtime_stops":0}
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.014

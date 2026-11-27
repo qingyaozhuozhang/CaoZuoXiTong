@@ -1,6 +1,6 @@
 # 测试与量化验收规范
 
-本规范用于复现 LUDP 的功能验证、正确性回归与性能测量。验收对象为 Linux x86_64 / System V AMD64 ABI 与 Linux ARM64 / AAPCS64 两套后端。A1 的验收条件是同一提交在两种原生环境中分别完成回归；提交 `3ffd736` 已取得两架构 full / UBSan 均通过的 [原生报告](archive/README.md)。下表中的“已有用例”表示仓库提供对应检查，不代表任意机器、任意提交已经通过；实际结论以该次运行的退出码、日志、环境和源码版本为准。
+本规范用于复现 LUDP 的功能验证、正确性回归与性能测量。验收对象为 Linux x86_64 / System V AMD64 ABI 与 Linux ARM64 / AAPCS64 两套后端。A1 的验收条件是同一提交在两种原生环境中分别完成回归。当前固定证据为提交 `b3988f82b2108ce99bdd192855b367483477bde8`、GitHub Actions 运行 `45958959682` 的[原生双架构报告](archive/README.md)：四个 full / UBSan 作业通过，完整清理、内核 uprobe 对照和 A3 真实合流均有实测数据。下表说明检查范围，不代表任意机器或后续提交已通过；实际结论以对应版本的退出码、日志、环境和源码身份为准。
 
 ## 1. 功能与证据矩阵
 
@@ -13,10 +13,10 @@
 | F5 动态开关 | 开启、关闭、再开启后分别核对事件数和业务返回值；重复开关幂等 | [probe_lifecycle_validation.c](../Proj40/probe_lifecycle_validation.c) | 在应用协调的安全点修改代码；关闭后旧事件仍可被消费，在途返回仍可完成 |
 | F6 多探针 | 16 个不同函数地址与第 17 个同地址入口探针共存；逐 ID 核验；另验证 80 项同地址链 | [multiprobe_validation.c](../Proj40/multiprobe_validation.c) | 注册表上限 256；同地址叠加只支持入口模式，返回探针有互斥约束 |
 | F7 多线程 | 运行后创建四线程；附加已有四线程；主线程活跃/futex 阻塞；线程退出回收；64 次信号与暂停竞争 | [probe_abi_validation.c](../Proj40/probe_abi_validation.c)、[thread_signal_validation.c](../Proj40/thread_signal_validation.c) | 目标进程可多线程；同一 `ludp_ctx` 使用单控制线程和单事件消费者；全线程暂停不替代应用安全点 |
-| A1 多架构 | x86_64、ARM64 后端及对应 ABI/指令用例已提供；`3ffd736` 原生双架构 full / UBSan 均通过 | [CI 矩阵](../.github/workflows/ci.yml)、[ARM64 验证说明](arm64.md) | 交叉编译和模拟器仅作开发检查；两种原生 runner 的同提交结果共同构成验收证据 |
+| A1 多架构 | x86_64、ARM64 后端及对应 ABI/指令用例；`b3988f8` 原生双架构 full / UBSan 均通过 | [CI 矩阵](../.github/workflows/ci.yml)、[ARM64 验证说明](arm64.md) | 交叉编译和模拟器仅作开发检查；两种原生 runner 的同提交结果共同构成验收证据 |
 | A2 条件探针 | EQ、NE、MASK_EQ、LT、LE、GT、GE 与第六个参数过滤；按预期参数集合核对事件 | [probe_extensions_validation.c](../Proj40/probe_extensions_validation.c) | 单参数、单条件、无符号 64 位比较；不自动解引用字符串或指针 |
-| A3 事件格式与合流 | TSC/CNTVCT 换算到 `CLOCK_MONOTONIC`；真实用户态事件与 ftrace getpid 事件合并，检查计数、TID、CPU 和时间关系 | [event_merge_demo.py](../scripts/event_merge_demo.py)、[merge_events.py](../scripts/merge_events.py) | 使用独立 tracefs instance 和单 CPU 短会话；真实采集与离线解析检查分开，新版双架构结论待 CI |
-| A4 目标进程内调用 | 回调上下文、过滤、热更新、非法地址回滚、活跃回调 `EBUSY`；主动破坏 GPR/浮点状态后核对业务结果；x86_64 检查 AVX 高半区，ARM64 检查 Q0–Q31 高半区及 FPCR/FPSR | [callback_validation.c](../Proj40/callback_validation.c)、[avx_state_sentinel.S](../Proj40/avx_state_sentinel.S)、[simd_state_aarch64.S](../Proj40/simd_state_aarch64.S) | 回调须短小、非阻塞、正常返回；不保存 AMX/SVE/SME；AVX 子用例受硬件条件限制，ARM64 固定宽度 SIMD 子用例为必测 |
+| A3 事件格式与合流 | TSC/CNTVCT 换算到 `CLOCK_MONOTONIC`；两架构真实用户态事件与 ftrace getpid 事件合流均通过，检查计数、TID、CPU 和时间关系 | [event_merge_demo.py](../scripts/event_merge_demo.py)、[merge_events.py](../scripts/merge_events.py) | 使用独立 tracefs instance 和单 CPU 短会话；真实采集与离线解析检查分开，不覆盖长期漂移及所有 perf/kprobe 格式 |
+| A4 目标进程内调用 | 回调上下文、过滤、热更新、非法地址拒绝并保持旧状态、活跃回调 `EBUSY`；主动破坏 GPR/浮点状态后核对业务结果；x86_64 检查 AVX 高半区，ARM64 检查 Q0–Q31 高半区及 FPCR/FPSR | [callback_validation.c](../Proj40/callback_validation.c)、[avx_state_sentinel.S](../Proj40/avx_state_sentinel.S)、[simd_state_aarch64.S](../Proj40/simd_state_aarch64.S) | 回调须短小、非阻塞、正常返回；不保存 AMX/SVE/SME；AVX 子用例受硬件条件限制，ARM64 固定宽度 SIMD 子用例为必测 |
 | A5 热更新 | 保持 probe ID；模式/过滤/启停/回调更新；版本号递增与幂等；非法配置不改变旧配置 | [probe_extensions_validation.c](../Proj40/probe_extensions_validation.c)、[callback_validation.c](../Proj40/callback_validation.c) | 应用安全点更新；用例覆盖配置拒绝与状态保持，不等价全部系统调用失败位置的故障注入 |
 
 ## 2. 正确性检查
@@ -30,7 +30,7 @@
 | `probe_lifecycle_validation` | F4/F5、原始入口、映射回收、忙时保护和槽位复用 | 四次会话通过，含禁止 madvise 的目标 |
 | `multiprobe_validation` | ≥16 个地址共存、同地址链重建、80 项链完整命中 | `F6 multi-probe: PASS` |
 | `probe_extensions_validation` | A2 过滤、A3 格式及时间范围、A5 配置更新；零溢出、零返回记录遗漏 | `A2/A3/A5 advanced suite: PASS`；该项不采集真实 ftrace 数据 |
-| `callback_validation` | 回调参数、现场恢复、更新回滚和活跃状态保护 | `A4 in-process call suite: PASS` |
+| `callback_validation` | 回调参数、现场恢复、配置更新、非法地址拒绝和活跃状态保护 | `A4 in-process call suite: PASS` |
 | `thread_signal_validation` | 已有线程附加、futex 阻塞、退出清理和信号转发 | 两种线程状态及信号竞争检查均通过 |
 | `api_contract_validation` | 公共 API 空指针/非法参数/`errno` 契约；主程序符号解析 | `public API/ELF contract: PASS` |
 | `aslr_pie_validation` | 8 次独立 exec，校验 PIE/动态库符号、实参、返回和入口恢复 | 两种映射地址均变化，全部调用通过 |
@@ -39,9 +39,9 @@
 
 ABI 哨兵按架构选择：[abi_state_sentinel.S](../Proj40/abi_state_sentinel.S) 对比 x86_64 通用寄存器、RFLAGS、x87/SSE 及 red zone；[abi_state_aarch64.S](../Proj40/abi_state_aarch64.S) 对比 ARM64 X0–X30、SP、NZCV、FPCR/FPSR 与 Q0–Q31 共 800 字节快照。十参数函数同时覆盖 ARM64 的 X6/X7 和第 9、10 个栈参数。A4 另验证回调扰动后的向量现场。AVX-512 没有独立的寄存器哨兵回归，不能由 AVX 子用例推导其全部状态已实测。`probe_abi_validation` 中的 `tiny_target` 为负向入口用例：x86_64 使用过短 RET，ARM64 使用不支持的 SVC；拒绝信息应结合套件最终退出码判断。ARM64 普通 RET 本身可搬迁。
 
-`callback_validation` 单独打印 AVX 子项的 PASS/FAIL，CPU/OS 不支持 AVX 时明确打印 SKIP。套件成功不消除该硬件条件下的跳过项。ARM64 分支使用固定宽度 SIMD 验证，必须打印对应 PASS，不能用 AVX 不可用代替 ARM64 的现场恢复检查。
+`callback_validation` 单独打印 AVX 子项的 PASS/FAIL，CPU/OS 不支持 AVX 时明确打印 SKIP。套件成功不消除该硬件条件下的跳过项。ARM64 分支使用固定宽度 SIMD 验证，必须打印对应 PASS，不能用 AVX 不可用代替 ARM64 的现场恢复检查。提交 `b3988f8` 的 x86_64 full / UBSan 均明确记录 AVX PASS，ARM64 full / UBSan 均明确记录 SIMD PASS。
 
-ASLR/PIE 增加 [aslr_pie_validation.c](../Proj40/aslr_pie_validation.c)：8 次独立 `exec`，分别按目标的实际布局解析主程序和动态库符号，并检查两个映射的装载地址确实发生变化；每轮核验参数、返回和入口恢复。该用例避免仅依赖 fork 继承布局，未覆盖所有 ELF 变体或会话中途 exec 迁移。UBSan 可发现已执行 C 路径中的部分未定义行为，不覆盖汇编语义或所有并发时序。
+ASLR/PIE 由 [aslr_pie_validation.c](../Proj40/aslr_pie_validation.c) 验证：8 次独立 `exec`，分别按目标的实际布局解析主程序和动态库符号，并检查两个映射的装载地址确实发生变化；每轮核验参数、返回和入口恢复。当前四个作业均通过 8 轮检查，未覆盖所有 ELF 变体或会话中途 exec 迁移。UBSan 使用 `-fsanitize=undefined -fno-sanitize-recover=all`，两个作业均未报告运行期未定义行为；它只检查已执行的 C 路径，不覆盖汇编语义或所有并发时序。
 
 ## 3. 量化指标与统计口径
 
@@ -74,23 +74,23 @@ paired_overhead_ns(mode) = median(overhead(mode, round))
 | 运行结果正确 | 返回值累计和、事件数、返回值、入口恢复、退出状态 | 样本 `status=PASS`；用户态模式要求 `drops=0`、`missed=0`、`stops=0` |
 | F4 无远程映射残留 | 独立 `probe_lifecycle_validation` 检查会话拥有的地址区间 | 不以移除耗时替代映射检查，也不据此宣称所有错误路径或无限时长运行均无泄漏 |
 
-新版“性能门禁通过”要求 getpid 入口/入口加返回增量、插入、移除及完整清理同时达标。`cleanup_ms` 是连续测量值，包含 remove、字节恢复校验和 detach，不以两个分段最大值相加代替。attach 和等待应用安全点仍单独说明。旧版 `3ffd736` 的门禁未包含完整清理，不能直接与新版 PASS 等同。
+“性能门禁通过”要求 getpid 入口/入口加返回增量、插入、移除及完整清理同时达标。`cleanup_ms` 是连续测量值，包含 remove、字节恢复校验和 detach，不以两个分段最大值相加代替。attach 和等待应用安全点单独说明。历史版本 `3ffd736` 的门禁未包含完整清理，其 PASS 不能替代当前口径；提交 `b3988f8` 的两架构已通过完整清理门禁。
 
 事件环默认容量为 `2^22` 条，远程布局为每槽 128 字节事件与 8 字节就绪标记，合计约 544 MiB 虚拟地址空间，另有头部和代码区；按需触页决定实际驻留内存。百万次返回基准计时结束后才消费事件，至少需容纳 2,000,000 条事件。不要沿用短演示的低容量 `LUDP_RING_CAP` 配置，否则应按溢出失败处理。事件区首次触页成本包含在本基准时间中。
 
 当前实现在所有暂停线程均确认未启用 seccomp 时，对至少 2 MiB 的事件环请求 `MADV_HUGEPAGE`，以降低首次触页及最终页表回收成本。内核可忽略或拒绝该建议；事件容量与正确性要求保持不变。`LUDP_HUGEPAGES=0` 可关闭建议，便于在同机复测普通页路径。启用 seccomp 或无法读取策略时跳过建议；独立受控用例禁止 madvise 并核验目标正常退出。基准记录该环境变量和透明大页策略，不能仅凭配置推断实际使用了大页，也不能将不支持大页解释为允许放宽清理阈值。
 
-## 4. 标准三组对照及现有缺口
+## 4. 标准三组对照与事件合流
 
 赛题要求的“无探针 / 内核 uprobe / 用户态探针”对应 `baseline`、`uprobe` 与 `entry`；`return` 是额外的入口加返回测量。当前程序已提供三组执行入口，但内核 PMU 设备、内核配置或权限不可用时会记录 `SKIP uprobe: ...`。
 
-普通运行允许内核组跳过，仍可判定用户态路径与基础阈值；只有加上 `--require-kernel` 且取得全部 5 轮内核样本，才完成本基准定义的三组对照。当前固定归档的两架构内核组均为 `SKIP`，不能用赛题给出的 1500–3000 ns 参考范围填入实测表，也不能据此给出相对内核 uprobe 的加速比。
+普通运行允许内核组跳过，仍可判定用户态路径与基础阈值；只有加上 `--require-kernel` 且取得全部 5 轮内核样本，才完成本基准定义的三组对照。当前固定归档 `b3988f8` 的两架构均取得 5/5 轮内核样本。内核对照结果采用第 6 节的实际数据，赛题给出的 1500–3000 ns 参考范围不替代实测。
 
 两条采集路径的工作量仍有差异：用户态组保存参数/返回信息并核验全部事件；内核组采样 IP/TID，perf ring 可能溢出，但通过计数器核验命中总数。该对照展示当前实现配置的函数调用成本，不等价相同事件字段、相同输出吞吐和零丢包下的严格比较。正式报告应保留此差异及内核权限环境。
 
 A3 分为三个层次：`probe_extensions_validation` 检查格式与约 ±1 秒的时间范围；`merge_events_validation.py` 使用离线样本检查解析、纳秒整数排序、配对和失败处理；`event_merge_demo.py` 才采集同一目标的真实用户态与 ftrace `sys_enter_getpid` 事件。第三项默认固定单 CPU、调用 100 次，要求 100 条入口、100 条返回和 100 条内核事件，核验 TID、CPU、唯一 call_id、时间单调性及两路无丢失。默认允许内核事件超出对应入口/返回区间最多 100,000 ns，保留实际最大偏差；这不是探针执行开销阈值。
 
-真实合流使用独立 tracefs instance 的 `mono` 时钟，结束后关闭并删除该实例。验证覆盖同机同次启动的短会话，不证明长期漂移上界、任意 CPU 迁移或所有 perf/kprobe 采集器兼容。`3ffd736` 归档没有这项原生采集，新版需在两架构 CI 中重新取得证据。
+真实合流使用独立 tracefs instance 的 `mono` 时钟，结束后关闭并删除该实例。提交 `b3988f8` 的两架构均已完成实际采集，原始用户态事件、内核事件、合流结果及内核缓冲统计一并归档。验证覆盖同机同次启动的短会话，不证明长期漂移上界、任意 CPU 迁移或所有 perf/kprobe 采集器兼容。输出是 perf-script 风格文本，不是 `perf.data` 二进制文件。
 
 ## 5. 复现命令
 
@@ -176,13 +176,32 @@ python3 scripts/event_merge_demo.py --require-kernel
 
 该命令读取真实采集数据，自动生成独立结果目录；权限或设施缺失时失败并记录原因。GitHub full 作业已准备权限和 tracefs，统一执行 `run_demo.py --full --require-kernel --require-merge`，同时要求三组性能对照和 A3 实测；本地无需为了离线检查修改系统追踪策略。
 
-## 6. 报告归档与结果解释
+## 6. 当前实测结果与固定材料
 
-[验证报告归档](archive/README.md) 保存提交 `3ffd736` 在 GitHub 原生 x86_64 和 ARM64 上的完整报告、环境、源码指纹、原始日志及性能样本。四个 full / UBSan 作业均通过，内核 uprobe 因权限不足为 `SKIP`，完整 detach 超过 10 ms；这些边界与原始数据一并保留。
+[验证报告归档](archive/README.md) 保存提交 `b3988f82b2108ce99bdd192855b367483477bde8`、运行 `45958959682` 的原始材料。四份 `summary.json` 的工作树状态均为空，37 个受记录源码文件的 SHA-256 在四个作业间一致，且构建前后不变。每个 full 作业为 18 项 PASS、0 项 FAIL、0 项 SKIP；每个 UBSan 作业为 15 项 PASS、0 项 FAIL，另按正确性模式跳过性能、内核 uprobe、真实合流三项，由 full 提供对应证据。
 
-已被该双架构证据替代的早期开发快照从当前目录移除，仍可通过 Git 历史追溯。`docs/archive/` 中的报告随仓库提交，适用于记录中的版本；本机新结果存入 `artifacts/`，GitHub 下载结果使用第 7 节的滚动 `test/results/` 目录。同步最新结果不会改写固定归档。
+单架构报告的需求表将 A1 标记为 SKIP，原因是必须联合另一架构判定。两架构的 full / UBSan 对应同一提交，因此共同支持本次 A1 通过结论；它与上述分步检查数采用不同汇总层次。
 
-每份正式验收材料应附源码提交 ID、工作树是否有修改、实际构建命令、机器与内核信息、CPU/亲和性、迭代数、轮数、原始日志和所有跳过项。现有 `benchmark.json` 自动记录日期、平台、CPU、亲和性与采样配置，但不自动记录 Git 提交和编译器版本，应在提交说明中补充。性能统计反映该次环境，复测时不要选择性删除慢样本或用不同机器的单次差值宣称优化收益。
+两架构每种模式执行 5 轮、每轮 1,000,000 次 `getpid`。以下开销是同轮相减后的中位数，延迟是所有对应样本的最大值：
+
+| 指标 | x86_64 | ARM64 | 判定 |
+|---|---:|---:|---|
+| 无探针成本中位数（ns/调用） | 103.719 | 198.964 | 基线 |
+| 仅附加增量（ns/调用） | 0.268 | -0.073 | 包含测量噪声，无探针跳转路径 |
+| 入口探针增量（ns/调用） | 60.264 | 46.091 | 均 <1000 |
+| 入口＋返回增量（ns/调用） | 124.975 | 145.095 | 均 <1000 |
+| 内核 uprobe 增量（ns/调用） | 4266.449 | 359.253 | 两架构各 5/5 轮实测 |
+| 最大插入延迟（ms） | 1.590 | 2.315 | 均 <10 |
+| 最大移除延迟（ms） | 0.862 | 0.728 | 均 <10 |
+| 最大完整清理延迟（ms） | 2.464 | 1.653 | 均 <10，含 detach |
+
+性能原始报告：[x86_64](archive/reports/2026-11-27-b3988f8/x86_64/full/ci/20261127-153059-814545/benchmark/benchmark.md)、[ARM64](archive/reports/2026-11-27-b3988f8/arm64/full/ci/20261127-153056-279603/benchmark/benchmark.md)。两组运行于不同架构、CPU 和虚拟机环境，这些数值不构成架构间性能优劣结论，也不证明每次调用的最大延迟或 P99 均小于 1000 ns。内核与用户态采集工作量差异见第 4 节。
+
+A3 在两架构各核验 100 次调用，均取得 200 条用户态入口/返回事件和 100 条内核事件；计数、TID、固定 CPU、配对、单调性及无丢失检查通过。内核事件超出对应入口/返回区间的最大距离分别为 x86_64 **1623 ns**、ARM64 **6091 ns**，均小于预设容差 100,000 ns。该值衡量本次合流的时间关系，不是探针执行开销。原始合流报告：[x86_64](archive/reports/2026-11-27-b3988f8/x86_64/full/ci/20261127-153059-814545/event-merge/report.md)、[ARM64](archive/reports/2026-11-27-b3988f8/arm64/full/ci/20261127-153056-279603/event-merge/report.md)。
+
+`docs/archive/` 中的材料随仓库提交，适用于记录中的源码版本；本机新结果存入 `artifacts/`，GitHub 下载结果使用第 7 节的滚动 `test/results/` 目录。同步最新结果不会改写固定归档，已替换的历史材料仍可通过 Git 历史追溯。
+
+正式材料保留源码提交、工作树状态、实际构建命令、机器与内核信息、CPU/亲和性、迭代数、轮数、原始日志和所有跳过项。`benchmark.json` 记录测量环境与样本，其所属 `summary.json` 和 `runner/environment.log` 提供提交及编译环境，应成组保存。性能统计反映该次环境，复测时不要选择性删除慢样本或用不同机器的单次差值宣称优化收益。
 
 ## 7. GitHub 原生双架构回归与最新结果
 
@@ -195,13 +214,13 @@ python3 scripts/event_merge_demo.py --require-kernel
 
 ARM64 标签对应原生 ARM64 虚拟机，工作流另外检查 `uname -m`，避免将交叉编译误记为原生运行。标签说明见 [GitHub 官方 runner 参考](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。`fail-fast: false` 保留另一架构的诊断机会；每个作业无论成功与否均上传已有环境记录、分步报告和日志。只有两架构的相关用例均通过，才能对该提交作出对应的 A1 验收结论。
 
-推送后，在仓库根目录下载最新一轮：
+推送后，在仓库根目录下载 `test` 分支最新一轮；本机代理端口按实际配置调整：
 
 ```bash
-python3 -m test sync --wait
+python3 -m test sync --branch test --wait --proxy http://127.0.0.1:7890
 ```
 
-也可明确指定运行编号：
+省略 `--proxy` 时沿用终端代理配置；强制直连使用 `--no-proxy`。省略 `--branch` 则选择当前分支。也可明确指定运行编号：
 
 ```bash
 python3 -m test sync --run-id RUN_ID --wait
@@ -232,7 +251,7 @@ test/
 
 同步工具的离线回归独立于项目 C/汇编功能验证，可运行 `python3 -m test validate`。它使用临时结果目录检查请求重试、产物处理和替换行为，不访问 GitHub，也不改写已有下载结果。完整使用说明见 [test 功能包](../test/README.md)。
 
-共享 runner 适合功能回归和明显性能退化定位，调度与频率变化可能影响最大延迟；正式指标应在指定验收机复测。新版 CI full 使用 `--require-kernel --require-merge`，同时要求真实内核对照和 A3 合流；两项缺失都会失败。权限通过临时 runner 的 sudo 执行获取，不要求修改开发机全局策略。Actions 产物有保留期限，正式提交时需归档与被测版本一致的结果。
+共享 runner 适合功能回归和明显性能退化定位，调度与频率变化可能影响最大延迟；指定验收机上的指标应在该机器复测。CI full 使用 `--require-kernel --require-merge`，同时要求真实内核对照和 A3 合流；两项缺失都会失败。权限通过临时 runner 的 sudo 执行获取，不要求修改开发机全局策略。Actions 产物有保留期限，正式提交应保留与被测版本一致的固定材料。
 
 ## 8. 报告名称与阅读顺序
 
@@ -247,4 +266,4 @@ test/
 | `version_comparison.md` | getpid 探针性能版本对照报告 | 可选的跨版本指标对照，明确旧报告缺失项 |
 | `memory_io_tuning.md` | 远程内存复制路径调优报告 | 可选的本机复制策略对比与配置建议 |
 
-单架构报告的 A1 标记为需跨架构汇总，不能由单机结果判定多架构完成。性能基准只度量 getpid 工作负载，不代表所有进阶功能组合的性能。历史归档保留原始标题与内容以维持 SHA-256 证据一致，新标题从下一次运行生效。
+单架构报告的 A1 标记为需跨架构汇总，不能由单机结果判定多架构完成。性能基准只度量 getpid 工作负载，不代表所有进阶功能组合的性能。提交 `b3988f8` 的报告已采用上述名称，固定材料保留生成时的原始标题与内容以维持 SHA-256 证据一致。

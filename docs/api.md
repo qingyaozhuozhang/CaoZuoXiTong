@@ -215,7 +215,7 @@ my-app           1234/1237 [003] 9123.456789012: ludp:target_entry: probe_id=7 c
 
 `monotonic_ns` 根据事件生成时的硬件计数估算（x86_64 为 TSC，ARM64 为 CNTVCT），在消费阶段计算；它不是消费时刻，也不是热路径直接读取的纳秒时间。当前没有周期重校准或误差界，跨 CPU、长时运行和合流分析需独立验证。
 
-仓库提供 [`event_stream_demo.c`](../Proj40/event_stream_demo.c) 与 [`event_merge_demo.py`](../scripts/event_merge_demo.py) 作为真实集成示例：将受控目标固定到已知 CPU，以独立 tracefs instance 的 mono 时钟采集同批 getpid 调用，再核对数量、线程、CPU、配对和时间关系。该路径要求有效 Linux TID，不使用未知身份回退来完成验收。固定 CPU 短会话的实测结果与离线解析检查分开，当前改进的双架构结果需重新运行 CI。
+仓库提供 [`event_stream_demo.c`](../Proj40/event_stream_demo.c) 与 [`event_merge_demo.py`](../scripts/event_merge_demo.py) 作为真实集成示例：将受控目标固定到已知 CPU，以独立 tracefs instance 的 mono 时钟采集同批 getpid 调用，再核对数量、线程、CPU、配对和时间关系。该路径要求有效 Linux TID，不使用未知身份回退来完成验收。固定 CPU 短会话的实测结果与离线解析检查分开；提交 `b3988f8` 的 x86_64 与 ARM64 原生采集均通过，完整结果见 [验证报告归档](archive/README.md)。
 
 [`merge_events.py`](../scripts/merge_events.py) 还可合并已导出的 perf-script 风格和 ftrace 文本。调用方必须先确认输入来自同一主机、同次启动及 CLOCK_MONOTONIC 时间域；工具不自动推断或修正时钟差。使用范围与严格验收命令见[测试规范](testing.md#55-报告门禁与-a3-专项验证)。
 

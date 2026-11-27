@@ -1,0 +1,10 @@
+started: 2026-11-27T15:31:07+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: /usr/bin/python3 /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/scripts/event_merge_demo.py --output /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-153056-279603/event-merge --require-kernel
+
+A3 real event merge: PASS
+Report: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/artifacts/ci/20261127-153056-279603/event-merge/report.md
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.234

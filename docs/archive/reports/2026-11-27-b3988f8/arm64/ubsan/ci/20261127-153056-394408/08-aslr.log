@@ -1,0 +1,17 @@
+started: 2026-11-27T15:30:59+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./aslr_pie_validation
+
+exec round 1: PIE=0xab5aace30d98 shared=0xff156fae0c18, arguments/returns/restoration PASS
+exec round 2: PIE=0xab4bfa070d98 shared=0xffd7675d0c18, arguments/returns/restoration PASS
+exec round 3: PIE=0xaaad66d40d98 shared=0xff22f7fd0c18, arguments/returns/restoration PASS
+exec round 4: PIE=0xab2c95520d98 shared=0xffb0dc600c18, arguments/returns/restoration PASS
+exec round 5: PIE=0xab387e3c0d98 shared=0xffce7db40c18, arguments/returns/restoration PASS
+exec round 6: PIE=0xab40a27f0d98 shared=0xff77f0800c18, arguments/returns/restoration PASS
+exec round 7: PIE=0xaae35da50d98 shared=0xff657cf10c18, arguments/returns/restoration PASS
+exec round 8: PIE=0xaab3ad500d98 shared=0xff246d6f0c18, arguments/returns/restoration PASS
+independent exec / ASLR / PIE: PASS (8 fresh images, both mappings varied)
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.04

@@ -1,0 +1,30 @@
+started: 2026-11-27T15:30:59+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: /usr/bin/python3 /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/scripts/merge_events_validation.py
+
+Offline synthetic-fixture validation; no real kernel capture is performed.
+test_cleanup_failure_is_not_reported_as_success (__main__.CaptureCleanupValidation.test_cleanup_failure_is_not_reported_as_success) ... ok
+test_collector_failure_still_disables_and_removes_owned_instance (__main__.CaptureCleanupValidation.test_collector_failure_still_disables_and_removes_owned_instance) ... ok
+test_failed_creation_does_not_remove_an_unowned_instance (__main__.CaptureCleanupValidation.test_failed_creation_does_not_remove_an_unowned_instance) ... ok
+test_missing_kernel_event_is_skip_but_instance_is_removed (__main__.CaptureCleanupValidation.test_missing_kernel_event_is_skip_but_instance_is_removed) ... ok
+test_stuck_collector_terminates_only_its_own_process (__main__.CaptureCleanupValidation.test_stuck_collector_terminates_only_its_own_process) ... ok
+test_event_count_not_silently_truncated (__main__.EventMergeValidation.test_event_count_not_silently_truncated) ... ok
+test_exact_nanoseconds_and_realistic_ftrace_header (__main__.EventMergeValidation.test_exact_nanoseconds_and_realistic_ftrace_header) ... ok
+test_linux_syscall_specific_printer_is_normalized (__main__.EventMergeValidation.test_linux_syscall_specific_printer_is_normalized) ... ok
+test_malformed_or_lost_event_not_silently_discarded (__main__.EventMergeValidation.test_malformed_or_lost_event_not_silently_discarded) ... ok
+test_merge_and_round_trip_preserve_clock_and_identity (__main__.EventMergeValidation.test_merge_and_round_trip_preserve_clock_and_identity) ... ok
+test_mismatched_and_duplicate_call_ids_fail (__main__.EventMergeValidation.test_mismatched_and_duplicate_call_ids_fail) ... ok
+test_missing_kernel_event_fails (__main__.EventMergeValidation.test_missing_kernel_event_fails) ... ok
+test_submicrosecond_ties_are_stable (__main__.EventMergeValidation.test_submicrosecond_ties_are_stable) ... ok
+test_valid_capture_and_measured_skew (__main__.EventMergeValidation.test_valid_capture_and_measured_skew) ... ok
+test_wrong_clock_domain_fails (__main__.EventMergeValidation.test_wrong_clock_domain_fails) ... ok
+test_wrong_identity_or_cpu_fails (__main__.EventMergeValidation.test_wrong_identity_or_cpu_fails) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.009s
+
+OK
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.088

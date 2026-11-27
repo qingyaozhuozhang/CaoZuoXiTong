@@ -1,0 +1,10 @@
+started: 2026-11-27T15:31:17+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: ./callback_validation
+
+A4 AVX register preservation: PASS
+A4 in-process call suite: PASS
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 0.011

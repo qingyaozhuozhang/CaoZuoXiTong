@@ -1,6 +1,6 @@
 # 架构与实现
 
-LUDP（Lightweight Dynamic Probe for User Space）提供 Linux x86_64 和 ARM64 两套用户态动态探针后端，分别遵循 System V AMD64 ABI 与 AAPCS64。控制进程使用 `ptrace` 协调目标线程并安装代码；探针触发后通过用户态跳转完成参数采集、可选回调和返回值记录。控制器和目标进程必须使用同一架构，构建时依据编译器目标选择后端。A1 的原生验收需同一提交在两种 GitHub Actions runner 上分别通过；`3ffd736` 已有[双架构归档](archive/README.md)，当前改进需以新一轮 CI 复验。
+LUDP（Lightweight Dynamic Probe for User Space）提供 Linux x86_64 和 ARM64 两套用户态动态探针后端，分别遵循 System V AMD64 ABI 与 AAPCS64。控制进程使用 `ptrace` 协调目标线程并安装代码；探针触发后通过用户态跳转完成参数采集、可选回调和返回值记录。控制器和目标进程必须使用同一架构，构建时依据编译器目标选择后端。提交 `b3988f8` 已通过两种原生 GitHub Actions Runner 的 full 与 UBSan 验证，原始证据见 [双架构归档](archive/README.md)。
 
 本文描述当前源码的设计与行为。运行条件和未覆盖场景见[适用范围与限制](limitations.md)，接口见[API 使用说明](api.md)，复现实验见[测试与性能评测](testing.md)，演示流程见[演示指南](demo.md)。
 
@@ -153,7 +153,7 @@ A5 接受完整的 `ludp_probe_config`，可更新过滤、回调、入口/返�
 
 `ludp_event_format_perf()` 提供 perf-script 风格文本，入口与返回均导出 `call_id`。合流工具用整数纳秒解析和排序支持的文本记录，保留来源、TID、CPU 与原始字段；不将文本转换为 `perf.data`。
 
-`event_merge_demo.py` 使用独立 tracefs instance 的 `mono` 时钟，与固定单 CPU 的用户态采集器协调同一批 getpid 调用。它核验两路数量、TID、CPU、唯一入口/返回配对、来源内时间单调性、采集窗口及内核事件相对入口/返回的时间偏差，结束时销毁实例。默认容差为 100,000 ns，报告同时保留实测最大偏差和内核文本时间精度；离线解析检查与真实采集分别报告，新版原生双架构结论需 CI。
+`event_merge_demo.py` 使用独立 tracefs instance 的 `mono` 时钟，与固定单 CPU 的用户态采集器协调同一批 getpid 调用。它核验两路数量、TID、CPU、唯一入口/返回配对、来源内时间单调性、采集窗口及内核事件相对入口/返回的时间偏差，结束时销毁实例。默认容差为 100,000 ns，报告同时保留实测最大偏差和内核文本时间精度。离线解析检查与真实采集分别报告；`b3988f8` 的两种原生架构均通过真实采集验证，数据见 [测试与性能评估](testing.md#6-当前实测结果与固定材料)。
 
 单次校准没有长期漂移误差界，环的领取顺序也不保证多线程时间戳严格递增。当前真实验证限于同机同次启动、固定单 CPU 的短会话；跨 CPU、长会话及其他 perf/kprobe 采集器需独立验证。排序不构成时间精度范围内跨来源先后关系的因果证明。
 

@@ -13,7 +13,9 @@ python3 scripts/run_demo.py --correctness-only
 python3 scripts/run_demo.py --full
 ```
 
-上述命令在对应架构的原生 Linux 上执行。Makefile 根据 `$(CC) -dumpmachine` 选择 x86_64 或 AArch64 后端；交叉编译用于构建检查，不能代替原生运行。切换架构或手工改变编译选项前先运行 `make clean`。
+上述命令在对应架构的原生 Linux 上执行。Makefile 根据 `$(CC) -dumpmachine` 选择 x86_64 或 AArch64 后端；交叉编译用于构建检查，不能代替原生运行。切换架构或手工改变编译选项前先运行 `make -C Proj40 clean`。
+
+`make check` 运行专项验证；`run_demo.py` 强制重建并保存报告。`--correctness-only` 用于功能与正确性检查，`--full` 另包含五轮百万次基准和 A3 真实合流；普通本地模式的内核设施缺失会显式标记 `SKIP`，严格验收命令和权限条件见 [演示指南](../docs/demo.md)。
 
 构建输出 `libludp.a`，公共头文件为 [ludp.h](ludp.h)。调用方需使用同一版本头文件重新编译；接口及安全点要求见 [API 文档](../docs/api.md)。
 
@@ -61,16 +63,23 @@ python3 scripts/run_demo.py --full
 | `abi_state_aarch64.S` | ARM64 X0–X30、SP、NZCV、FPCR/FPSR 与 Q0–Q31 状态哨兵 |
 | `simd_state_aarch64.S` | ARM64 回调后的 Q0–Q31 高半区恢复哨兵 |
 
-完整验证使用 `make -C Proj40 check`；`make -C Proj40 test` 保留为兼容别名，不生成以 `test` 命名的程序。
+`make -C Proj40 test` 保留为 `check` 的兼容别名，不生成以 `test` 命名的程序。包含性能与真实合流的完整流程由 `run_demo.py --full` 提供。
 
 ## GitHub Actions 验证结果
 
-[CI 工作流](../.github/workflows/ci.yml) 使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 原生 runner，分别执行完整功能/性能和 UBSan 回归。提交 `3ffd736` 的两架构 full / UBSan 四个作业均已通过，原始证据见 [验证报告归档](../docs/archive/README.md)。后续提交需重新验证，交叉编译与模拟执行不替代原生性能测试。
+[CI 工作流](../.github/workflows/ci.yml) 使用 `ubuntu-24.04` 与 `ubuntu-24.04-arm` 原生 Runner。提交 `b3988f82b2108ce99bdd192855b367483477bde8` 已通过运行 `45958959682 / attempt 1` 的四个作业，原始证据统一见 [验证报告归档](../docs/archive/README.md)。
 
-推送后，从仓库根目录执行：
+| 验证配置 | 本轮结果与职责 |
+| --- | --- |
+| x86_64 / full、arm64 / full | 功能与正确性、五轮百万次基准、真实内核 uprobe 对照、完整清理门禁和 A3 ftrace 合流均通过 |
+| x86_64 / ubsan、arm64 / ubsan | 功能与正确性、演示程序和离线工具检查通过；性能、内核预检和真实合流由 full 作业承担，UBSan 中按职责跳过 |
+
+ARM64 数据由 GitHub 原生 ARM64 Runner 产生，不来自本地 x86_64 或 QEMU。A3 已在两架构实测通过，范围为固定 CPU 的短会话；跨 CPU、长时钟漂移和其他 perf/kprobe 采集器仍需独立验证。后续实现变更需重新验证，具体限制见 [支持范围](../docs/limitations.md)。
+
+本机 GitHub 登录配置见 [test 功能包说明](../test/README.md)。推送 `test` 分支后，从仓库根目录执行常用命令，代理端口按实际配置填写：
 
 ```bash
-python3 -m test sync --wait
+python3 -m test sync --branch test --wait --proxy http://127.0.0.1:7890
 ```
 
-功能包将当前分支最新一轮的成功或失败结果下载至 `test/results/`，仅替换上一轮结果，保留提交和 run/attempt 信息；包代码与说明不会被覆盖。入口说明见 [test/README.md](../test/README.md)，回归口径见[测试规范](../docs/testing.md)，ARM64 约束见[架构文档](../docs/architecture.md)。
+功能包将所选分支最新一轮的成功或失败结果下载至 `test/results/`，仅替换上一轮结果，保留提交和 run/attempt 信息；包代码与说明不会被覆盖。下载完成后查看 `test/results/report.md`，无需 `git pull`。回归口径见 [测试规范](../docs/testing.md)，ARM64 实现与验收见 [多架构文档](../docs/arm64.md)。

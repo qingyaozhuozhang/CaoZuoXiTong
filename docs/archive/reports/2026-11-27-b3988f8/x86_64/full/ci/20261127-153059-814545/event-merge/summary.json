@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "collector": {
+    "pid": 2383,
+    "cpu": 0,
+    "calls": 100,
+    "events": 200,
+    "begin_ns": 215072393638,
+    "end_ns": 215179438736,
+    "overflow": 0,
+    "return_missed": 0,
+    "runtime_stops": 0
+  },
+  "metrics": {
+    "calls_verified": 100,
+    "ludp_events": 200,
+    "kernel_events": 100,
+    "maximum_interval_skew_ns": 1623,
+    "clock_tolerance_ns": 100000,
+    "kernel_text_precision_ns": 1000,
+    "capture_duration_ns": 107045098
+  },
+  "kernel_event": "syscalls:sys_enter_getpid",
+  "trace_clock": "mono",
+  "tracefs": "/sys/kernel/tracing",
+  "evidence_kind": "native_live_capture",
+  "created_at": "2026-11-27T07:31:43.811724+00:00",
+  "architecture": "x86_64",
+  "clock_tolerance_ns": 100000,
+  "required": true
+}

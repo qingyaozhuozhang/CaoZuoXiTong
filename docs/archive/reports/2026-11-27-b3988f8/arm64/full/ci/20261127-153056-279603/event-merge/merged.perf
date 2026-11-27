@@ -1,0 +1,301 @@
+# CLOCK_MONOTONIC; real LUDP + real ftrace syscall events
+ludp-getpid      2524/2524 [000] 358.595134779: ludp:getpid_entry: probe_id=1 call_id=1 arg0=0xff9068df0004 arg1=0x1
+event_stream_de  2524 [000] 358.595191000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.595192283: ludp:getpid_return: probe_id=1 call_id=1 retval=0x9dc
+ludp-getpid      2524/2524 [000] 358.596254435: ludp:getpid_entry: probe_id=1 call_id=2 arg0=0x0 arg1=0xff9068dfab50
+event_stream_de  2524 [000] 358.596255000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.596255507: ludp:getpid_return: probe_id=1 call_id=2 retval=0x9dc
+ludp-getpid      2524/2524 [000] 358.597311643: ludp:getpid_entry: probe_id=1 call_id=3 arg0=0x0 arg1=0xff9068dfab50
+event_stream_de  2524 [000] 358.597312000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.597312299: ludp:getpid_return: probe_id=1 call_id=3 retval=0x9dc
+event_stream_de  2524 [000] 358.598368000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.598368027: ludp:getpid_entry: probe_id=1 call_id=4 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.598368715: ludp:getpid_return: probe_id=1 call_id=4 retval=0x9dc
+event_stream_de  2524 [000] 358.599425000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.599425115: ludp:getpid_entry: probe_id=1 call_id=5 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.599425755: ludp:getpid_return: probe_id=1 call_id=5 retval=0x9dc
+event_stream_de  2524 [000] 358.600481000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.600481459: ludp:getpid_entry: probe_id=1 call_id=6 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.600482067: ludp:getpid_return: probe_id=1 call_id=6 retval=0x9dc
+event_stream_de  2524 [000] 358.601537000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.601537419: ludp:getpid_entry: probe_id=1 call_id=7 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.601537891: ludp:getpid_return: probe_id=1 call_id=7 retval=0x9dc
+event_stream_de  2524 [000] 358.602593000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.602593123: ludp:getpid_entry: probe_id=1 call_id=8 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.602593667: ludp:getpid_return: probe_id=1 call_id=8 retval=0x9dc
+ludp-getpid      2524/2524 [000] 358.603648859: ludp:getpid_entry: probe_id=1 call_id=9 arg0=0x0 arg1=0xff9068dfab50
+event_stream_de  2524 [000] 358.603649000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.603649499: ludp:getpid_return: probe_id=1 call_id=9 retval=0x9dc
+event_stream_de  2524 [000] 358.604705000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.604705155: ludp:getpid_entry: probe_id=1 call_id=10 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.604705667: ludp:getpid_return: probe_id=1 call_id=10 retval=0x9dc
+event_stream_de  2524 [000] 358.605760000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.605760939: ludp:getpid_entry: probe_id=1 call_id=11 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.605761403: ludp:getpid_return: probe_id=1 call_id=11 retval=0x9dc
+event_stream_de  2524 [000] 358.606816000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.606816387: ludp:getpid_entry: probe_id=1 call_id=12 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.606816907: ludp:getpid_return: probe_id=1 call_id=12 retval=0x9dc
+event_stream_de  2524 [000] 358.607872000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.607872051: ludp:getpid_entry: probe_id=1 call_id=13 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.607872603: ludp:getpid_return: probe_id=1 call_id=13 retval=0x9dc
+event_stream_de  2524 [000] 358.608928000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.608928291: ludp:getpid_entry: probe_id=1 call_id=14 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.608928827: ludp:getpid_return: probe_id=1 call_id=14 retval=0x9dc
+event_stream_de  2524 [000] 358.609983000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.609983811: ludp:getpid_entry: probe_id=1 call_id=15 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.609984363: ludp:getpid_return: probe_id=1 call_id=15 retval=0x9dc
+event_stream_de  2524 [000] 358.611040000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.611040475: ludp:getpid_entry: probe_id=1 call_id=16 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.611041099: ludp:getpid_return: probe_id=1 call_id=16 retval=0x9dc
+event_stream_de  2524 [000] 358.612096000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.612096843: ludp:getpid_entry: probe_id=1 call_id=17 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.612097403: ludp:getpid_return: probe_id=1 call_id=17 retval=0x9dc
+event_stream_de  2524 [000] 358.613152000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.613153307: ludp:getpid_entry: probe_id=1 call_id=18 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.613153827: ludp:getpid_return: probe_id=1 call_id=18 retval=0x9dc
+event_stream_de  2524 [000] 358.614209000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.614209411: ludp:getpid_entry: probe_id=1 call_id=19 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.614209939: ludp:getpid_return: probe_id=1 call_id=19 retval=0x9dc
+event_stream_de  2524 [000] 358.615264000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.615265083: ludp:getpid_entry: probe_id=1 call_id=20 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.615265531: ludp:getpid_return: probe_id=1 call_id=20 retval=0x9dc
+event_stream_de  2524 [000] 358.616320000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.616321147: ludp:getpid_entry: probe_id=1 call_id=21 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.616321691: ludp:getpid_return: probe_id=1 call_id=21 retval=0x9dc
+event_stream_de  2524 [000] 358.617376000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.617376987: ludp:getpid_entry: probe_id=1 call_id=22 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.617377515: ludp:getpid_return: probe_id=1 call_id=22 retval=0x9dc
+event_stream_de  2524 [000] 358.618432000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.618433035: ludp:getpid_entry: probe_id=1 call_id=23 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.618433563: ludp:getpid_return: probe_id=1 call_id=23 retval=0x9dc
+event_stream_de  2524 [000] 358.619487000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.619488755: ludp:getpid_entry: probe_id=1 call_id=24 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.619489219: ludp:getpid_return: probe_id=1 call_id=24 retval=0x9dc
+event_stream_de  2524 [000] 358.620543000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.620544731: ludp:getpid_entry: probe_id=1 call_id=25 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.620545299: ludp:getpid_return: probe_id=1 call_id=25 retval=0x9dc
+event_stream_de  2524 [000] 358.621599000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.621600571: ludp:getpid_entry: probe_id=1 call_id=26 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.621601099: ludp:getpid_return: probe_id=1 call_id=26 retval=0x9dc
+event_stream_de  2524 [000] 358.622655000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.622656259: ludp:getpid_entry: probe_id=1 call_id=27 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.622656779: ludp:getpid_return: probe_id=1 call_id=27 retval=0x9dc
+event_stream_de  2524 [000] 358.623711000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.623712027: ludp:getpid_entry: probe_id=1 call_id=28 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.623712491: ludp:getpid_return: probe_id=1 call_id=28 retval=0x9dc
+event_stream_de  2524 [000] 358.624767000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.624768603: ludp:getpid_entry: probe_id=1 call_id=29 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.624769075: ludp:getpid_return: probe_id=1 call_id=29 retval=0x9dc
+event_stream_de  2524 [000] 358.625823000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.625824387: ludp:getpid_entry: probe_id=1 call_id=30 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.625824851: ludp:getpid_return: probe_id=1 call_id=30 retval=0x9dc
+event_stream_de  2524 [000] 358.626879000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.626880659: ludp:getpid_entry: probe_id=1 call_id=31 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.626881211: ludp:getpid_return: probe_id=1 call_id=31 retval=0x9dc
+event_stream_de  2524 [000] 358.627935000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.627936275: ludp:getpid_entry: probe_id=1 call_id=32 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.627936827: ludp:getpid_return: probe_id=1 call_id=32 retval=0x9dc
+event_stream_de  2524 [000] 358.628990000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.628992123: ludp:getpid_entry: probe_id=1 call_id=33 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.628992651: ludp:getpid_return: probe_id=1 call_id=33 retval=0x9dc
+event_stream_de  2524 [000] 358.630047000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.630048395: ludp:getpid_entry: probe_id=1 call_id=34 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.630048915: ludp:getpid_return: probe_id=1 call_id=34 retval=0x9dc
+event_stream_de  2524 [000] 358.631103000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.631104723: ludp:getpid_entry: probe_id=1 call_id=35 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.631105251: ludp:getpid_return: probe_id=1 call_id=35 retval=0x9dc
+event_stream_de  2524 [000] 358.632159000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.632160603: ludp:getpid_entry: probe_id=1 call_id=36 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.632161139: ludp:getpid_return: probe_id=1 call_id=36 retval=0x9dc
+event_stream_de  2524 [000] 358.633214000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.633216259: ludp:getpid_entry: probe_id=1 call_id=37 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.633216779: ludp:getpid_return: probe_id=1 call_id=37 retval=0x9dc
+event_stream_de  2524 [000] 358.634270000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.634272355: ludp:getpid_entry: probe_id=1 call_id=38 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.634272859: ludp:getpid_return: probe_id=1 call_id=38 retval=0x9dc
+event_stream_de  2524 [000] 358.635326000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.635328011: ludp:getpid_entry: probe_id=1 call_id=39 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.635328467: ludp:getpid_return: probe_id=1 call_id=39 retval=0x9dc
+event_stream_de  2524 [000] 358.636382000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.636383955: ludp:getpid_entry: probe_id=1 call_id=40 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.636384475: ludp:getpid_return: probe_id=1 call_id=40 retval=0x9dc
+event_stream_de  2524 [000] 358.637437000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.637439595: ludp:getpid_entry: probe_id=1 call_id=41 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.637440147: ludp:getpid_return: probe_id=1 call_id=41 retval=0x9dc
+event_stream_de  2524 [000] 358.638493000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.638495499: ludp:getpid_entry: probe_id=1 call_id=42 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.638495947: ludp:getpid_return: probe_id=1 call_id=42 retval=0x9dc
+event_stream_de  2524 [000] 358.639549000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.639551155: ludp:getpid_entry: probe_id=1 call_id=43 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.639551611: ludp:getpid_return: probe_id=1 call_id=43 retval=0x9dc
+event_stream_de  2524 [000] 358.640604000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.640606995: ludp:getpid_entry: probe_id=1 call_id=44 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.640607443: ludp:getpid_return: probe_id=1 call_id=44 retval=0x9dc
+event_stream_de  2524 [000] 358.641660000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.641662675: ludp:getpid_entry: probe_id=1 call_id=45 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.641663139: ludp:getpid_return: probe_id=1 call_id=45 retval=0x9dc
+event_stream_de  2524 [000] 358.642716000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.642718675: ludp:getpid_entry: probe_id=1 call_id=46 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.642719195: ludp:getpid_return: probe_id=1 call_id=46 retval=0x9dc
+event_stream_de  2524 [000] 358.643772000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.643774451: ludp:getpid_entry: probe_id=1 call_id=47 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.643774915: ludp:getpid_return: probe_id=1 call_id=47 retval=0x9dc
+event_stream_de  2524 [000] 358.644828000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.644830299: ludp:getpid_entry: probe_id=1 call_id=48 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.644830859: ludp:getpid_return: probe_id=1 call_id=48 retval=0x9dc
+event_stream_de  2524 [000] 358.645884000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.645886531: ludp:getpid_entry: probe_id=1 call_id=49 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.645886987: ludp:getpid_return: probe_id=1 call_id=49 retval=0x9dc
+event_stream_de  2524 [000] 358.646940000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.646942467: ludp:getpid_entry: probe_id=1 call_id=50 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.646942979: ludp:getpid_return: probe_id=1 call_id=50 retval=0x9dc
+event_stream_de  2524 [000] 358.647995000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.647998075: ludp:getpid_entry: probe_id=1 call_id=51 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.647998611: ludp:getpid_return: probe_id=1 call_id=51 retval=0x9dc
+event_stream_de  2524 [000] 358.649051000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.649054347: ludp:getpid_entry: probe_id=1 call_id=52 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.649054867: ludp:getpid_return: probe_id=1 call_id=52 retval=0x9dc
+event_stream_de  2524 [000] 358.650108000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.650110627: ludp:getpid_entry: probe_id=1 call_id=53 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.650111155: ludp:getpid_return: probe_id=1 call_id=53 retval=0x9dc
+event_stream_de  2524 [000] 358.651163000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.651166315: ludp:getpid_entry: probe_id=1 call_id=54 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.651166819: ludp:getpid_return: probe_id=1 call_id=54 retval=0x9dc
+event_stream_de  2524 [000] 358.652219000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.652222411: ludp:getpid_entry: probe_id=1 call_id=55 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.652222931: ludp:getpid_return: probe_id=1 call_id=55 retval=0x9dc
+event_stream_de  2524 [000] 358.653275000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.653278051: ludp:getpid_entry: probe_id=1 call_id=56 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.653278515: ludp:getpid_return: probe_id=1 call_id=56 retval=0x9dc
+event_stream_de  2524 [000] 358.654331000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.654333875: ludp:getpid_entry: probe_id=1 call_id=57 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.654334331: ludp:getpid_return: probe_id=1 call_id=57 retval=0x9dc
+event_stream_de  2524 [000] 358.655386000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.655389411: ludp:getpid_entry: probe_id=1 call_id=58 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.655389875: ludp:getpid_return: probe_id=1 call_id=58 retval=0x9dc
+event_stream_de  2524 [000] 358.656442000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.656445299: ludp:getpid_entry: probe_id=1 call_id=59 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.656445771: ludp:getpid_return: probe_id=1 call_id=59 retval=0x9dc
+event_stream_de  2524 [000] 358.657498000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.657501203: ludp:getpid_entry: probe_id=1 call_id=60 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.657501731: ludp:getpid_return: probe_id=1 call_id=60 retval=0x9dc
+event_stream_de  2524 [000] 358.658559000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.658562027: ludp:getpid_entry: probe_id=1 call_id=61 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.658563475: ludp:getpid_return: probe_id=1 call_id=61 retval=0x9dc
+event_stream_de  2524 [000] 358.659619000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.659621899: ludp:getpid_entry: probe_id=1 call_id=62 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.659622819: ludp:getpid_return: probe_id=1 call_id=62 retval=0x9dc
+event_stream_de  2524 [000] 358.660677000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.660680459: ludp:getpid_entry: probe_id=1 call_id=63 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.660681371: ludp:getpid_return: probe_id=1 call_id=63 retval=0x9dc
+event_stream_de  2524 [000] 358.661735000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.661738387: ludp:getpid_entry: probe_id=1 call_id=64 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.661739363: ludp:getpid_return: probe_id=1 call_id=64 retval=0x9dc
+event_stream_de  2524 [000] 358.662792000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.662795139: ludp:getpid_entry: probe_id=1 call_id=65 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.662795843: ludp:getpid_return: probe_id=1 call_id=65 retval=0x9dc
+event_stream_de  2524 [000] 358.663847000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.663851331: ludp:getpid_entry: probe_id=1 call_id=66 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.663851835: ludp:getpid_return: probe_id=1 call_id=66 retval=0x9dc
+event_stream_de  2524 [000] 358.664903000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.664907299: ludp:getpid_entry: probe_id=1 call_id=67 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.664907835: ludp:getpid_return: probe_id=1 call_id=67 retval=0x9dc
+event_stream_de  2524 [000] 358.665959000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.665963059: ludp:getpid_entry: probe_id=1 call_id=68 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.665963579: ludp:getpid_return: probe_id=1 call_id=68 retval=0x9dc
+event_stream_de  2524 [000] 358.667016000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.667019451: ludp:getpid_entry: probe_id=1 call_id=69 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.667020019: ludp:getpid_return: probe_id=1 call_id=69 retval=0x9dc
+event_stream_de  2524 [000] 358.668071000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.668075243: ludp:getpid_entry: probe_id=1 call_id=70 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.668075883: ludp:getpid_return: probe_id=1 call_id=70 retval=0x9dc
+event_stream_de  2524 [000] 358.669127000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.669131043: ludp:getpid_entry: probe_id=1 call_id=71 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.669131523: ludp:getpid_return: probe_id=1 call_id=71 retval=0x9dc
+event_stream_de  2524 [000] 358.670183000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.670186915: ludp:getpid_entry: probe_id=1 call_id=72 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.670187363: ludp:getpid_return: probe_id=1 call_id=72 retval=0x9dc
+event_stream_de  2524 [000] 358.671238000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.671242651: ludp:getpid_entry: probe_id=1 call_id=73 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.671243107: ludp:getpid_return: probe_id=1 call_id=73 retval=0x9dc
+event_stream_de  2524 [000] 358.672294000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.672298699: ludp:getpid_entry: probe_id=1 call_id=74 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.672299219: ludp:getpid_return: probe_id=1 call_id=74 retval=0x9dc
+event_stream_de  2524 [000] 358.673350000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.673354419: ludp:getpid_entry: probe_id=1 call_id=75 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.673355315: ludp:getpid_return: probe_id=1 call_id=75 retval=0x9dc
+event_stream_de  2524 [000] 358.674406000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.674410787: ludp:getpid_entry: probe_id=1 call_id=76 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.674411307: ludp:getpid_return: probe_id=1 call_id=76 retval=0x9dc
+event_stream_de  2524 [000] 358.675462000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.675466459: ludp:getpid_entry: probe_id=1 call_id=77 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.675466931: ludp:getpid_return: probe_id=1 call_id=77 retval=0x9dc
+event_stream_de  2524 [000] 358.676518000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.676522291: ludp:getpid_entry: probe_id=1 call_id=78 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.676522803: ludp:getpid_return: probe_id=1 call_id=78 retval=0x9dc
+event_stream_de  2524 [000] 358.677573000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.677578115: ludp:getpid_entry: probe_id=1 call_id=79 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.677578563: ludp:getpid_return: probe_id=1 call_id=79 retval=0x9dc
+event_stream_de  2524 [000] 358.678630000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.678634067: ludp:getpid_entry: probe_id=1 call_id=80 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.678634787: ludp:getpid_return: probe_id=1 call_id=80 retval=0x9dc
+event_stream_de  2524 [000] 358.679685000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.679689979: ludp:getpid_entry: probe_id=1 call_id=81 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.679690499: ludp:getpid_return: probe_id=1 call_id=81 retval=0x9dc
+event_stream_de  2524 [000] 358.680741000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.680745843: ludp:getpid_entry: probe_id=1 call_id=82 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.680746411: ludp:getpid_return: probe_id=1 call_id=82 retval=0x9dc
+event_stream_de  2524 [000] 358.681797000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.681801571: ludp:getpid_entry: probe_id=1 call_id=83 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.681802091: ludp:getpid_return: probe_id=1 call_id=83 retval=0x9dc
+event_stream_de  2524 [000] 358.682853000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.682857467: ludp:getpid_entry: probe_id=1 call_id=84 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.682857987: ludp:getpid_return: probe_id=1 call_id=84 retval=0x9dc
+event_stream_de  2524 [000] 358.683908000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.683913195: ludp:getpid_entry: probe_id=1 call_id=85 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.683913723: ludp:getpid_return: probe_id=1 call_id=85 retval=0x9dc
+event_stream_de  2524 [000] 358.684964000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.684969259: ludp:getpid_entry: probe_id=1 call_id=86 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.684969779: ludp:getpid_return: probe_id=1 call_id=86 retval=0x9dc
+event_stream_de  2524 [000] 358.686021000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.686025579: ludp:getpid_entry: probe_id=1 call_id=87 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.686026115: ludp:getpid_return: probe_id=1 call_id=87 retval=0x9dc
+event_stream_de  2524 [000] 358.687076000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.687081339: ludp:getpid_entry: probe_id=1 call_id=88 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.687081795: ludp:getpid_return: probe_id=1 call_id=88 retval=0x9dc
+event_stream_de  2524 [000] 358.688132000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.688137179: ludp:getpid_entry: probe_id=1 call_id=89 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.688137643: ludp:getpid_return: probe_id=1 call_id=89 retval=0x9dc
+event_stream_de  2524 [000] 358.689188000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.689193483: ludp:getpid_entry: probe_id=1 call_id=90 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.689193939: ludp:getpid_return: probe_id=1 call_id=90 retval=0x9dc
+event_stream_de  2524 [000] 358.690244000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.690249203: ludp:getpid_entry: probe_id=1 call_id=91 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.690249659: ludp:getpid_return: probe_id=1 call_id=91 retval=0x9dc
+event_stream_de  2524 [000] 358.691299000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.691304819: ludp:getpid_entry: probe_id=1 call_id=92 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.691305339: ludp:getpid_return: probe_id=1 call_id=92 retval=0x9dc
+event_stream_de  2524 [000] 358.692355000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.692360795: ludp:getpid_entry: probe_id=1 call_id=93 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.692361323: ludp:getpid_return: probe_id=1 call_id=93 retval=0x9dc
+event_stream_de  2524 [000] 358.693411000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.693416651: ludp:getpid_entry: probe_id=1 call_id=94 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.693417115: ludp:getpid_return: probe_id=1 call_id=94 retval=0x9dc
+event_stream_de  2524 [000] 358.694467000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.694472451: ludp:getpid_entry: probe_id=1 call_id=95 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.694472971: ludp:getpid_return: probe_id=1 call_id=95 retval=0x9dc
+event_stream_de  2524 [000] 358.695523000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.695528171: ludp:getpid_entry: probe_id=1 call_id=96 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.695528787: ludp:getpid_return: probe_id=1 call_id=96 retval=0x9dc
+event_stream_de  2524 [000] 358.696578000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.696584091: ludp:getpid_entry: probe_id=1 call_id=97 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.696584611: ludp:getpid_return: probe_id=1 call_id=97 retval=0x9dc
+event_stream_de  2524 [000] 358.697634000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.697639843: ludp:getpid_entry: probe_id=1 call_id=98 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.697640307: ludp:getpid_return: probe_id=1 call_id=98 retval=0x9dc
+event_stream_de  2524 [000] 358.698690000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.698695683: ludp:getpid_entry: probe_id=1 call_id=99 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.698696451: ludp:getpid_return: probe_id=1 call_id=99 retval=0x9dc
+event_stream_de  2524 [000] 358.699746000: ftrace:sys_enter_getpid: sys_getpid()
+ludp-getpid      2524/2524 [000] 358.699751667: ludp:getpid_entry: probe_id=1 call_id=100 arg0=0x0 arg1=0xff9068dfab50
+ludp-getpid      2524/2524 [000] 358.699752187: ludp:getpid_return: probe_id=1 call_id=100 retval=0x9dc

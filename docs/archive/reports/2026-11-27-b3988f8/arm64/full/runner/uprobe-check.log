@@ -1,0 +1,1 @@
+SAMPLE mode=uprobe round=1 iterations=1000 total_ns=1403342 ns_per_call=1403.342 events=1000 drops=0 missed=0 stops=0 attach_ms=0.000 insert_ms=0.000 remove_ms=0.000 detach_ms=0.000 cleanup_ms=0.000 status=PASS

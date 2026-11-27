@@ -1,0 +1,443 @@
+{
+  "schema_version": 2,
+  "started_at": "2026-11-27T15:30:58+08:00",
+  "mode": "correctness-only",
+  "status": "PASS",
+  "steps": [
+    {
+      "id": "preflight",
+      "title": "平台与工具检查",
+      "status": "PASS",
+      "reason": "Linux x86_64 构建工具可用"
+    },
+    {
+      "id": "01-build",
+      "title": "重新构建库、验证程序与演示",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "make",
+        "-B",
+        "-j2",
+        "all",
+        "CC=cc",
+        "AR=ar",
+        "CFLAGS=-O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread",
+        "LDFLAGS=-pthread -fsanitize=undefined -fno-sanitize-recover=all"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:30:58+08:00",
+      "elapsed_seconds": 8.296,
+      "log": "01-build.log"
+    },
+    {
+      "id": "source-integrity",
+      "title": "构建前后源码一致性",
+      "status": "PASS",
+      "reason": "源码 SHA-256 一致"
+    },
+    {
+      "id": "02-entry-return",
+      "title": "F1/F2/F3：入口跳转、六参数与返回值",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_demo"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:06+08:00",
+      "elapsed_seconds": 0.011,
+      "log": "02-entry-return.log"
+    },
+    {
+      "id": "03-lifecycle",
+      "title": "F4/F5：恢复指令、回收映射与动态开关",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_lifecycle_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:06+08:00",
+      "elapsed_seconds": 0.114,
+      "log": "03-lifecycle.log"
+    },
+    {
+      "id": "04-multiprobe",
+      "title": "F6：16 个地址与同址多探针",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./multiprobe_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.015,
+      "log": "04-multiprobe.log"
+    },
+    {
+      "id": "05-threads",
+      "title": "F7：多线程与信号交付",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./thread_signal_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.055,
+      "log": "05-threads.log"
+    },
+    {
+      "id": "06-decoder",
+      "title": "指令解码边界",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./instruction_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.001,
+      "log": "06-decoder.log"
+    },
+    {
+      "id": "07-abi",
+      "title": "F1/F2/F3：ABI、递归、信号与缓冲区边界",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_abi_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.145,
+      "log": "07-abi.log"
+    },
+    {
+      "id": "08-api",
+      "title": "公共 API 与 ELF 契约",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./api_contract_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.009,
+      "log": "08-api.log"
+    },
+    {
+      "id": "08-aslr",
+      "title": "独立 exec、ASLR 与 PIE 符号定位",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./aslr_pie_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.08,
+      "log": "08-aslr.log"
+    },
+    {
+      "id": "09-advanced",
+      "title": "A2/A3/A5：过滤、事件格式与热更新",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./probe_extensions_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.012,
+      "log": "09-advanced.log"
+    },
+    {
+      "id": "10-callback",
+      "title": "A4：目标进程内回调",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./callback_validation"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.011,
+      "log": "10-callback.log"
+    },
+    {
+      "id": "10-event-stream",
+      "title": "A3：用户态事件导出与调用配对",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "./event_stream_demo",
+        "--standalone"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.017,
+      "log": "10-event-stream.log"
+    },
+    {
+      "id": "event-merge-validation",
+      "title": "事件合流工具的离线正确性检查",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": [
+        "/usr/bin/python3",
+        "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/scripts/merge_events_validation.py"
+      ],
+      "cwd": "/home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40",
+      "started_at": "2026-11-27T15:31:07+08:00",
+      "elapsed_seconds": 0.072,
+      "log": "event-merge-validation.log"
+    },
+    {
+      "id": "benchmark",
+      "title": "百万次 getpid 基准与性能阈值",
+      "status": "SKIP",
+      "reason": "仅正确性模式不测量性能"
+    },
+    {
+      "id": "kernel-uprobe",
+      "title": "内核 uprobe 实测",
+      "status": "SKIP",
+      "reason": "仅正确性模式不测量性能"
+    },
+    {
+      "id": "12-event-merge",
+      "title": "A3：用户态与 ftrace 真实事件合流",
+      "status": "SKIP",
+      "reason": "需要 --full 且所有前置正确性检查通过"
+    }
+  ],
+  "environment": {
+    "platform": "Linux-7.0.0-1018-aws-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "python": "3.12.3",
+    "git_commit": "b3988f82b2108ce99bdd192855b367483477bde8",
+    "build_variables": {
+      "CC": "cc",
+      "AR": "ar",
+      "CFLAGS": "-O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread",
+      "LDFLAGS": "-pthread -fsanitize=undefined -fno-sanitize-recover=all"
+    },
+    "input_variables": {
+      "CFLAGS": "-O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread",
+      "LDFLAGS": "-pthread -fsanitize=undefined -fno-sanitize-recover=all"
+    },
+    "ignored_make_control_variables": [],
+    "cpu": "Intel(R) Xeon(R) 6975P-C",
+    "affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "ptrace_scope": "1",
+    "perf_event_paranoid": "4",
+    "uprobe_pmu_type": "9",
+    "git_status": "",
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "make": "GNU Make 4.3"
+  },
+  "source_sha256": {
+    ".github/workflows/ci.yml": "8fc27fd26050ad3f9db3a5c325e350f5512ea24c6925b3e7444ded5dadadf861",
+    "Proj40/Makefile": "e120d3127c26f63f08e4279a871b6e055a4ec9b9986f9d9a312c73b1968ada5e",
+    "Proj40/aarch64.c": "fd06bbe02753ac6c53045fbcc7840e06fb559c8a8ede54118814042ede23c05c",
+    "Proj40/aarch64_trampoline.S": "1d828e856db0a23f1bd8746c6db0521ac13fcf95dd1dbfc3288e8cb51f46157e",
+    "Proj40/abi_state_aarch64.S": "ff0140d20bed4f019c4f52010c64d11f05e12845f830c14df55ead8e9ca2ad48",
+    "Proj40/abi_state_sentinel.S": "be9c517c02bed88c41a38c3f985812a507e55f5cecbf374c13e3879b0d92807b",
+    "Proj40/api_contract_validation.c": "501657cf5822360a3c8f81d4724e94fe68283e07fff6622aa31b3753384b9c76",
+    "Proj40/aslr_pie_validation.c": "a36bd846361d8359715dad5e3bfb83816e9cd8eab3016d10e2256abaf6daf0fa",
+    "Proj40/auto_tune.py": "a39364d019b2571804948c0e5d62e6535e772116650dfcba523935ec6bf072f9",
+    "Proj40/avx_state_sentinel.S": "3485e3b8c9a824584dbf10ad3962aaf228b8cee6ff7259a5e7bf1100d0039d88",
+    "Proj40/benchmark.py": "605a5147698f2ebb04860a9ff97018d56779a4a37c22533bec5ee05a458d3dc1",
+    "Proj40/benchmark_validation.py": "feb5a8697c1b55e419b94950722b2561aa80c02ba5d5845f344d74325115812e",
+    "Proj40/callback_validation.c": "36576354a282c90118c5cc96a7f0bb90dea66977d2a7a7342955b5577221c283",
+    "Proj40/elf.c": "26d0e3d75656a983ad0b1ebfa6a2169b86d45f49aa05171160f3ed1e0166c6de",
+    "Proj40/evaluate.py": "2911ac072e686a865fab0261c52b528dadb48d29119fbd216baeb3e7c17e2d18",
+    "Proj40/event_stream_demo.c": "2f60f15f7a75b3cda0c49087796be8a40b8cb630226fc965909c871aa78fd15e",
+    "Proj40/getpid_benchmark.c": "1f420d6d6152e4b931def76d4e84ccbaabf3ffda1bf760e325640be5e6741b15",
+    "Proj40/instruction_validation.c": "984969e35fec5fb164ad316408f3a627ae62b93899aaabb1b911205b6b738cd0",
+    "Proj40/ludp.c": "d05722b8ad596e926cfaa5c0eaa2985a55052ca693c2fafcc470d67225611737",
+    "Proj40/ludp.h": "e8c96021fe7bba75fe51511d9c48f0c3d26a66044c631154543b4b73ed4d18d4",
+    "Proj40/ludp_internal.h": "b94df6890377ddb3c0b91d37dde4ce724f9358ad365c18d6fd898a9305a9bbda",
+    "Proj40/multiprobe_validation.c": "ab6f8fbeaad5a97b8de986f522353a9a7ea6261312535d2bbb542eadbfbd2066",
+    "Proj40/probe_abi_validation.c": "3de6f91588f8156083cea0fb264b4c45cd6dbd4c17be637ce01510a815f30c5e",
+    "Proj40/probe_demo.c": "108b2ca44e599673e1e660005b86cab66a16728e407d1925f8c7a75fa8965479",
+    "Proj40/probe_extensions_validation.c": "b54fa849e90e754cd3251d252662adc290dc01da3be96eb780979bfd2c96866c",
+    "Proj40/probe_lifecycle_validation.c": "92b5a3d0266e0776fac09186a8e4cf58f053ad63276be9a1c265339d33813dd1",
+    "Proj40/probe_targets.c": "dfcf5312531c4c2ca27f7cd6c2a8ab4c4df5c4763161a19f2c498c2f37fed51c",
+    "Proj40/probes.c": "dbe449f1fea744320720fa186097611581967e77aa1f22b4bf4fa620d59d943d",
+    "Proj40/simd_state_aarch64.S": "68904a196d89e04c610cdc784143fec5b35d2ca4438194294074e01f0ca3cb2e",
+    "Proj40/thread_signal_validation.c": "7471b45d717cbb1a51a4244eaea394fd41f188ed3e7a4cf9f0c845fabfeee88f",
+    "Proj40/trampoline.S": "a88774ce0060a58724dd74735dc102f3d61912849061823527fe189c3812b948",
+    "Proj40/validation_arch.h": "de3b01d7d5a45196f7f5a464740eaf30a9751efde4bd9bf68ff32ca2694edfa9",
+    "Proj40/x86dec.c": "8bf9c89ec5addd17168b70bcf7025418af7fc7aa914abd1b72bc10db660e5dee",
+    "scripts/event_merge_demo.py": "fbf3aa0a273ad9fde01ecae4562d338bb071b87b28499f68234aeceb811aff51",
+    "scripts/merge_events.py": "296730db83fc55127d6cd1e2ad2c11a4dbb46d1c07b98f18027fc0a8ffa9cbd6",
+    "scripts/merge_events_validation.py": "2c17c378abc182cbde86af60c38895ea41c6d8035b2c7e91aeec2dd924f7f6ed",
+    "scripts/run_demo.py": "e566e8e1c1ee94876e95e2d4f402726865fbba64ed1db2f70e240e1c79db1949"
+  },
+  "source_sha256_after_build": {
+    ".github/workflows/ci.yml": "8fc27fd26050ad3f9db3a5c325e350f5512ea24c6925b3e7444ded5dadadf861",
+    "Proj40/Makefile": "e120d3127c26f63f08e4279a871b6e055a4ec9b9986f9d9a312c73b1968ada5e",
+    "Proj40/aarch64.c": "fd06bbe02753ac6c53045fbcc7840e06fb559c8a8ede54118814042ede23c05c",
+    "Proj40/aarch64_trampoline.S": "1d828e856db0a23f1bd8746c6db0521ac13fcf95dd1dbfc3288e8cb51f46157e",
+    "Proj40/abi_state_aarch64.S": "ff0140d20bed4f019c4f52010c64d11f05e12845f830c14df55ead8e9ca2ad48",
+    "Proj40/abi_state_sentinel.S": "be9c517c02bed88c41a38c3f985812a507e55f5cecbf374c13e3879b0d92807b",
+    "Proj40/api_contract_validation.c": "501657cf5822360a3c8f81d4724e94fe68283e07fff6622aa31b3753384b9c76",
+    "Proj40/aslr_pie_validation.c": "a36bd846361d8359715dad5e3bfb83816e9cd8eab3016d10e2256abaf6daf0fa",
+    "Proj40/auto_tune.py": "a39364d019b2571804948c0e5d62e6535e772116650dfcba523935ec6bf072f9",
+    "Proj40/avx_state_sentinel.S": "3485e3b8c9a824584dbf10ad3962aaf228b8cee6ff7259a5e7bf1100d0039d88",
+    "Proj40/benchmark.py": "605a5147698f2ebb04860a9ff97018d56779a4a37c22533bec5ee05a458d3dc1",
+    "Proj40/benchmark_validation.py": "feb5a8697c1b55e419b94950722b2561aa80c02ba5d5845f344d74325115812e",
+    "Proj40/callback_validation.c": "36576354a282c90118c5cc96a7f0bb90dea66977d2a7a7342955b5577221c283",
+    "Proj40/elf.c": "26d0e3d75656a983ad0b1ebfa6a2169b86d45f49aa05171160f3ed1e0166c6de",
+    "Proj40/evaluate.py": "2911ac072e686a865fab0261c52b528dadb48d29119fbd216baeb3e7c17e2d18",
+    "Proj40/event_stream_demo.c": "2f60f15f7a75b3cda0c49087796be8a40b8cb630226fc965909c871aa78fd15e",
+    "Proj40/getpid_benchmark.c": "1f420d6d6152e4b931def76d4e84ccbaabf3ffda1bf760e325640be5e6741b15",
+    "Proj40/instruction_validation.c": "984969e35fec5fb164ad316408f3a627ae62b93899aaabb1b911205b6b738cd0",
+    "Proj40/ludp.c": "d05722b8ad596e926cfaa5c0eaa2985a55052ca693c2fafcc470d67225611737",
+    "Proj40/ludp.h": "e8c96021fe7bba75fe51511d9c48f0c3d26a66044c631154543b4b73ed4d18d4",
+    "Proj40/ludp_internal.h": "b94df6890377ddb3c0b91d37dde4ce724f9358ad365c18d6fd898a9305a9bbda",
+    "Proj40/multiprobe_validation.c": "ab6f8fbeaad5a97b8de986f522353a9a7ea6261312535d2bbb542eadbfbd2066",
+    "Proj40/probe_abi_validation.c": "3de6f91588f8156083cea0fb264b4c45cd6dbd4c17be637ce01510a815f30c5e",
+    "Proj40/probe_demo.c": "108b2ca44e599673e1e660005b86cab66a16728e407d1925f8c7a75fa8965479",
+    "Proj40/probe_extensions_validation.c": "b54fa849e90e754cd3251d252662adc290dc01da3be96eb780979bfd2c96866c",
+    "Proj40/probe_lifecycle_validation.c": "92b5a3d0266e0776fac09186a8e4cf58f053ad63276be9a1c265339d33813dd1",
+    "Proj40/probe_targets.c": "dfcf5312531c4c2ca27f7cd6c2a8ab4c4df5c4763161a19f2c498c2f37fed51c",
+    "Proj40/probes.c": "dbe449f1fea744320720fa186097611581967e77aa1f22b4bf4fa620d59d943d",
+    "Proj40/simd_state_aarch64.S": "68904a196d89e04c610cdc784143fec5b35d2ca4438194294074e01f0ca3cb2e",
+    "Proj40/thread_signal_validation.c": "7471b45d717cbb1a51a4244eaea394fd41f188ed3e7a4cf9f0c845fabfeee88f",
+    "Proj40/trampoline.S": "a88774ce0060a58724dd74735dc102f3d61912849061823527fe189c3812b948",
+    "Proj40/validation_arch.h": "de3b01d7d5a45196f7f5a464740eaf30a9751efde4bd9bf68ff32ca2694edfa9",
+    "Proj40/x86dec.c": "8bf9c89ec5addd17168b70bcf7025418af7fc7aa914abd1b72bc10db660e5dee",
+    "scripts/event_merge_demo.py": "fbf3aa0a273ad9fde01ecae4562d338bb071b87b28499f68234aeceb811aff51",
+    "scripts/merge_events.py": "296730db83fc55127d6cd1e2ad2c11a4dbb46d1c07b98f18027fc0a8ffa9cbd6",
+    "scripts/merge_events_validation.py": "2c17c378abc182cbde86af60c38895ea41c6d8035b2c7e91aeec2dd924f7f6ed",
+    "scripts/run_demo.py": "e566e8e1c1ee94876e95e2d4f402726865fbba64ed1db2f70e240e1c79db1949"
+  },
+  "finished_at": "2026-11-27T15:31:07+08:00",
+  "requirements": [
+    {
+      "id": "F1",
+      "scope": "动态库用户态跳转",
+      "status": "PASS",
+      "checks": [
+        "02-entry-return",
+        "06-decoder",
+        "08-aslr"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "F2",
+      "scope": "前六个整数类 ABI 参数",
+      "status": "PASS",
+      "checks": [
+        "02-entry-return",
+        "07-abi",
+        "08-aslr"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "F3",
+      "scope": "正常 ABI 返回及事件配对",
+      "status": "PASS",
+      "checks": [
+        "02-entry-return",
+        "07-abi",
+        "08-aslr"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "F4",
+      "scope": "指令恢复与会话映射回收",
+      "status": "PASS",
+      "checks": [
+        "03-lifecycle"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "F5",
+      "scope": "安全点动态开关",
+      "status": "PASS",
+      "checks": [
+        "03-lifecycle"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "F6",
+      "scope": "至少 16 个不同地址探针",
+      "status": "PASS",
+      "checks": [
+        "04-multiprobe"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "F7",
+      "scope": "多线程、信号及安全点控制",
+      "status": "PASS",
+      "checks": [
+        "05-threads",
+        "07-abi"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "A1",
+      "scope": "同一提交的 x86_64 与 ARM64 原生结果",
+      "status": "SKIP",
+      "checks": [],
+      "reason": "单架构报告；需结合另一架构同提交结果"
+    },
+    {
+      "id": "A2",
+      "scope": "单参数条件过滤",
+      "status": "PASS",
+      "checks": [
+        "09-advanced"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "A3",
+      "scope": "CLOCK_MONOTONIC 用户态 / ftrace 真实事件合流",
+      "status": "SKIP",
+      "checks": [
+        "12-event-merge",
+        "10-event-stream",
+        "event-merge-validation"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "A4",
+      "scope": "目标进程内受约束回调",
+      "status": "PASS",
+      "checks": [
+        "10-callback"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    },
+    {
+      "id": "A5",
+      "scope": "安全点配置热更新",
+      "status": "PASS",
+      "checks": [
+        "09-advanced",
+        "10-callback"
+      ],
+      "reason": "仅按本次实际执行的检查判定，适用范围见 docs/limitations.md"
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+ludp-getpid      2383/2383 [000] 215.072395069: ludp:getpid_entry: probe_id=1 call_id=1 arg0=0x0 arg1=0x80
+ludp-getpid      2383/2383 [000] 215.072612920: ludp:getpid_return: probe_id=1 call_id=1 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.073679323: ludp:getpid_entry: probe_id=1 call_id=2 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.073679879: ludp:getpid_return: probe_id=1 call_id=2 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.074743117: ludp:getpid_entry: probe_id=1 call_id=3 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.074743685: ludp:getpid_return: probe_id=1 call_id=3 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.075806659: ludp:getpid_entry: probe_id=1 call_id=4 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.075807165: ludp:getpid_return: probe_id=1 call_id=4 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.076870042: ludp:getpid_entry: probe_id=1 call_id=5 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.076870471: ludp:getpid_return: probe_id=1 call_id=5 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.077933248: ludp:getpid_entry: probe_id=1 call_id=6 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.077933690: ludp:getpid_return: probe_id=1 call_id=6 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.079007956: ludp:getpid_entry: probe_id=1 call_id=7 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.079008459: ludp:getpid_return: probe_id=1 call_id=7 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.080017232: ludp:getpid_entry: probe_id=1 call_id=8 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.080017663: ludp:getpid_return: probe_id=1 call_id=8 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.081074740: ludp:getpid_entry: probe_id=1 call_id=9 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.081075413: ludp:getpid_return: probe_id=1 call_id=9 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.082139204: ludp:getpid_entry: probe_id=1 call_id=10 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.082139952: ludp:getpid_return: probe_id=1 call_id=10 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.083203579: ludp:getpid_entry: probe_id=1 call_id=11 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.083204128: ludp:getpid_return: probe_id=1 call_id=11 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.084267630: ludp:getpid_entry: probe_id=1 call_id=12 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.084268064: ludp:getpid_return: probe_id=1 call_id=12 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.085332030: ludp:getpid_entry: probe_id=1 call_id=13 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.085332719: ludp:getpid_return: probe_id=1 call_id=13 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.086396437: ludp:getpid_entry: probe_id=1 call_id=14 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.086396869: ludp:getpid_return: probe_id=1 call_id=14 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.087459872: ludp:getpid_entry: probe_id=1 call_id=15 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.087460312: ludp:getpid_return: probe_id=1 call_id=15 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.088523891: ludp:getpid_entry: probe_id=1 call_id=16 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.088729712: ludp:getpid_return: probe_id=1 call_id=16 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.089793597: ludp:getpid_entry: probe_id=1 call_id=17 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.089794082: ludp:getpid_return: probe_id=1 call_id=17 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.090857944: ludp:getpid_entry: probe_id=1 call_id=18 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.090858520: ludp:getpid_return: probe_id=1 call_id=18 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.091922135: ludp:getpid_entry: probe_id=1 call_id=19 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.091922578: ludp:getpid_return: probe_id=1 call_id=19 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.092986275: ludp:getpid_entry: probe_id=1 call_id=20 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.092986852: ludp:getpid_return: probe_id=1 call_id=20 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.094015851: ludp:getpid_entry: probe_id=1 call_id=21 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.094016404: ludp:getpid_return: probe_id=1 call_id=21 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.095079833: ludp:getpid_entry: probe_id=1 call_id=22 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.095080327: ludp:getpid_return: probe_id=1 call_id=22 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.096143922: ludp:getpid_entry: probe_id=1 call_id=23 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.096144363: ludp:getpid_return: probe_id=1 call_id=23 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.097207847: ludp:getpid_entry: probe_id=1 call_id=24 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.097208285: ludp:getpid_return: probe_id=1 call_id=24 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.098271711: ludp:getpid_entry: probe_id=1 call_id=25 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.098272163: ludp:getpid_return: probe_id=1 call_id=25 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.099335807: ludp:getpid_entry: probe_id=1 call_id=26 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.099336248: ludp:getpid_return: probe_id=1 call_id=26 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.100399687: ludp:getpid_entry: probe_id=1 call_id=27 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.100400210: ludp:getpid_return: probe_id=1 call_id=27 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.101464379: ludp:getpid_entry: probe_id=1 call_id=28 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.101464973: ludp:getpid_return: probe_id=1 call_id=28 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.102528771: ludp:getpid_entry: probe_id=1 call_id=29 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.102529204: ludp:getpid_return: probe_id=1 call_id=29 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.103592699: ludp:getpid_entry: probe_id=1 call_id=30 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.103593256: ludp:getpid_return: probe_id=1 call_id=30 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.104656575: ludp:getpid_entry: probe_id=1 call_id=31 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.104657002: ludp:getpid_return: probe_id=1 call_id=31 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.105720818: ludp:getpid_entry: probe_id=1 call_id=32 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.105721503: ludp:getpid_return: probe_id=1 call_id=32 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.106785364: ludp:getpid_entry: probe_id=1 call_id=33 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.106786125: ludp:getpid_return: probe_id=1 call_id=33 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.107849886: ludp:getpid_entry: probe_id=1 call_id=34 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.107850323: ludp:getpid_return: probe_id=1 call_id=34 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.108914579: ludp:getpid_entry: probe_id=1 call_id=35 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.108915017: ludp:getpid_return: probe_id=1 call_id=35 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.109978689: ludp:getpid_entry: probe_id=1 call_id=36 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.109979235: ludp:getpid_return: probe_id=1 call_id=36 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.111046234: ludp:getpid_entry: probe_id=1 call_id=37 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.111046819: ludp:getpid_return: probe_id=1 call_id=37 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.112110478: ludp:getpid_entry: probe_id=1 call_id=38 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.112111172: ludp:getpid_return: probe_id=1 call_id=38 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.113175158: ludp:getpid_entry: probe_id=1 call_id=39 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.113175808: ludp:getpid_return: probe_id=1 call_id=39 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.114239306: ludp:getpid_entry: probe_id=1 call_id=40 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.114239871: ludp:getpid_return: probe_id=1 call_id=40 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.115304555: ludp:getpid_entry: probe_id=1 call_id=41 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.115305412: ludp:getpid_return: probe_id=1 call_id=41 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.116370281: ludp:getpid_entry: probe_id=1 call_id=42 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.116370840: ludp:getpid_return: probe_id=1 call_id=42 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.117435021: ludp:getpid_entry: probe_id=1 call_id=43 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.117435641: ludp:getpid_return: probe_id=1 call_id=43 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.118500031: ludp:getpid_entry: probe_id=1 call_id=44 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.118500620: ludp:getpid_return: probe_id=1 call_id=44 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.119564123: ludp:getpid_entry: probe_id=1 call_id=45 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.119564669: ludp:getpid_return: probe_id=1 call_id=45 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.120628192: ludp:getpid_entry: probe_id=1 call_id=46 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.120628749: ludp:getpid_return: probe_id=1 call_id=46 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.121693786: ludp:getpid_entry: probe_id=1 call_id=47 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.121694592: ludp:getpid_return: probe_id=1 call_id=47 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.122759001: ludp:getpid_entry: probe_id=1 call_id=48 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.122759860: ludp:getpid_return: probe_id=1 call_id=48 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.123824630: ludp:getpid_entry: probe_id=1 call_id=49 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.123825189: ludp:getpid_return: probe_id=1 call_id=49 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.124891760: ludp:getpid_entry: probe_id=1 call_id=50 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.124892369: ludp:getpid_return: probe_id=1 call_id=50 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.125956810: ludp:getpid_entry: probe_id=1 call_id=51 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.125957526: ludp:getpid_return: probe_id=1 call_id=51 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.127015572: ludp:getpid_entry: probe_id=1 call_id=52 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.127016109: ludp:getpid_return: probe_id=1 call_id=52 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.128083486: ludp:getpid_entry: probe_id=1 call_id=53 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.128084115: ludp:getpid_return: probe_id=1 call_id=53 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.129148017: ludp:getpid_entry: probe_id=1 call_id=54 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.129148655: ludp:getpid_return: probe_id=1 call_id=54 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.130212863: ludp:getpid_entry: probe_id=1 call_id=55 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.130213523: ludp:getpid_return: probe_id=1 call_id=55 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.131277729: ludp:getpid_entry: probe_id=1 call_id=56 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.131278397: ludp:getpid_return: probe_id=1 call_id=56 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.132342746: ludp:getpid_entry: probe_id=1 call_id=57 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.132343636: ludp:getpid_return: probe_id=1 call_id=57 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.133408068: ludp:getpid_entry: probe_id=1 call_id=58 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.133408885: ludp:getpid_return: probe_id=1 call_id=58 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.134473377: ludp:getpid_entry: probe_id=1 call_id=59 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.134473894: ludp:getpid_return: probe_id=1 call_id=59 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.135538384: ludp:getpid_entry: probe_id=1 call_id=60 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.135539079: ludp:getpid_return: probe_id=1 call_id=60 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.136602800: ludp:getpid_entry: probe_id=1 call_id=61 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.136603293: ludp:getpid_return: probe_id=1 call_id=61 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.137669174: ludp:getpid_entry: probe_id=1 call_id=62 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.137670166: ludp:getpid_return: probe_id=1 call_id=62 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.138734590: ludp:getpid_entry: probe_id=1 call_id=63 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.138735485: ludp:getpid_return: probe_id=1 call_id=63 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.139799802: ludp:getpid_entry: probe_id=1 call_id=64 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.139800383: ludp:getpid_return: probe_id=1 call_id=64 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.140866215: ludp:getpid_entry: probe_id=1 call_id=65 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.140866767: ludp:getpid_return: probe_id=1 call_id=65 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.141931424: ludp:getpid_entry: probe_id=1 call_id=66 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.141932097: ludp:getpid_return: probe_id=1 call_id=66 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.143007688: ludp:getpid_entry: probe_id=1 call_id=67 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.143008623: ludp:getpid_return: probe_id=1 call_id=67 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.144074462: ludp:getpid_entry: probe_id=1 call_id=68 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.144075039: ludp:getpid_return: probe_id=1 call_id=68 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.145141046: ludp:getpid_entry: probe_id=1 call_id=69 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.145141691: ludp:getpid_return: probe_id=1 call_id=69 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.146206621: ludp:getpid_entry: probe_id=1 call_id=70 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.146207424: ludp:getpid_return: probe_id=1 call_id=70 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.147272763: ludp:getpid_entry: probe_id=1 call_id=71 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.147273433: ludp:getpid_return: probe_id=1 call_id=71 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.148339936: ludp:getpid_entry: probe_id=1 call_id=72 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.148340643: ludp:getpid_return: probe_id=1 call_id=72 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.149407867: ludp:getpid_entry: probe_id=1 call_id=73 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.149408501: ludp:getpid_return: probe_id=1 call_id=73 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.150475127: ludp:getpid_entry: probe_id=1 call_id=74 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.150476176: ludp:getpid_return: probe_id=1 call_id=74 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.151548544: ludp:getpid_entry: probe_id=1 call_id=75 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.151549507: ludp:getpid_return: probe_id=1 call_id=75 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.152618557: ludp:getpid_entry: probe_id=1 call_id=76 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.152619356: ludp:getpid_return: probe_id=1 call_id=76 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.153685412: ludp:getpid_entry: probe_id=1 call_id=77 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.153686134: ludp:getpid_return: probe_id=1 call_id=77 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.154754083: ludp:getpid_entry: probe_id=1 call_id=78 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.154754646: ludp:getpid_return: probe_id=1 call_id=78 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.155820783: ludp:getpid_entry: probe_id=1 call_id=79 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.155821884: ludp:getpid_return: probe_id=1 call_id=79 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.156884619: ludp:getpid_entry: probe_id=1 call_id=80 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.156885623: ludp:getpid_return: probe_id=1 call_id=80 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.157952491: ludp:getpid_entry: probe_id=1 call_id=81 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.157953326: ludp:getpid_return: probe_id=1 call_id=81 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.159016272: ludp:getpid_entry: probe_id=1 call_id=82 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.159017006: ludp:getpid_return: probe_id=1 call_id=82 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.160082335: ludp:getpid_entry: probe_id=1 call_id=83 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.160082895: ludp:getpid_return: probe_id=1 call_id=83 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.161150100: ludp:getpid_entry: probe_id=1 call_id=84 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.161151051: ludp:getpid_return: probe_id=1 call_id=84 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.162217951: ludp:getpid_entry: probe_id=1 call_id=85 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.162218630: ludp:getpid_return: probe_id=1 call_id=85 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.163284310: ludp:getpid_entry: probe_id=1 call_id=86 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.163285034: ludp:getpid_return: probe_id=1 call_id=86 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.164349962: ludp:getpid_entry: probe_id=1 call_id=87 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.164350619: ludp:getpid_return: probe_id=1 call_id=87 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.165417158: ludp:getpid_entry: probe_id=1 call_id=88 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.165418113: ludp:getpid_return: probe_id=1 call_id=88 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.166483595: ludp:getpid_entry: probe_id=1 call_id=89 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.166484459: ludp:getpid_return: probe_id=1 call_id=89 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.167552205: ludp:getpid_entry: probe_id=1 call_id=90 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.167553116: ludp:getpid_return: probe_id=1 call_id=90 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.168619162: ludp:getpid_entry: probe_id=1 call_id=91 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.168619899: ludp:getpid_return: probe_id=1 call_id=91 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.169685540: ludp:getpid_entry: probe_id=1 call_id=92 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.169686079: ludp:getpid_return: probe_id=1 call_id=92 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.170752882: ludp:getpid_entry: probe_id=1 call_id=93 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.170753651: ludp:getpid_return: probe_id=1 call_id=93 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.171819275: ludp:getpid_entry: probe_id=1 call_id=94 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.171819939: ludp:getpid_return: probe_id=1 call_id=94 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.172886366: ludp:getpid_entry: probe_id=1 call_id=95 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.172887044: ludp:getpid_return: probe_id=1 call_id=95 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.173953759: ludp:getpid_entry: probe_id=1 call_id=96 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.173954681: ludp:getpid_return: probe_id=1 call_id=96 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.175017881: ludp:getpid_entry: probe_id=1 call_id=97 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.175018377: ludp:getpid_return: probe_id=1 call_id=97 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.176083949: ludp:getpid_entry: probe_id=1 call_id=98 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.176084647: ludp:getpid_return: probe_id=1 call_id=98 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.177151892: ludp:getpid_entry: probe_id=1 call_id=99 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.177153030: ludp:getpid_return: probe_id=1 call_id=99 retval=0x94f
+ludp-getpid      2383/2383 [000] 215.178225956: ludp:getpid_entry: probe_id=1 call_id=100 arg0=0x0 arg1=0x0
+ludp-getpid      2383/2383 [000] 215.178226947: ludp:getpid_return: probe_id=1 call_id=100 retval=0x94f

@@ -1,0 +1,28 @@
+started: 2026-11-27T15:30:56+08:00
+cwd: /home/runner/work/CaoZuoXiTong/CaoZuoXiTong/Proj40
+command: make -B -j2 all CC=cc AR=ar 'CFLAGS=-O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread' 'LDFLAGS=-pthread -fsanitize=undefined -fno-sanitize-recover=all'
+
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -c -o ludp.o ludp.c
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -c -o probes.o probes.c
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -c -o elf.o elf.c
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -c -o aarch64.o aarch64.c
+cc -c -o aarch64_trampoline.o aarch64_trampoline.S
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fno-optimize-sibling-calls -fpatchable-function-entry=8 -shared -fPIC -o libprobe_targets.so probe_targets.c
+rm -f libludp.a
+ar rcs libludp.a ludp.o probes.o elf.o aarch64.o aarch64_trampoline.o
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -o instruction_validation instruction_validation.c libludp.a -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -rdynamic -o probe_abi_validation probe_abi_validation.c abi_state_aarch64.S libludp.a -ldl -L. -lprobe_targets -Wl,-rpath,'$ORIGIN' -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fpatchable-function-entry=8 -o probe_lifecycle_validation probe_lifecycle_validation.c libludp.a -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fpatchable-function-entry=8 -fno-ipa-icf -o multiprobe_validation multiprobe_validation.c libludp.a -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fpatchable-function-entry=8 -fno-ipa-icf -o probe_extensions_validation probe_extensions_validation.c libludp.a -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fpatchable-function-entry=8 -fno-ipa-icf -o callback_validation callback_validation.c simd_state_aarch64.S libludp.a -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -rdynamic -o thread_signal_validation thread_signal_validation.c libludp.a -ldl -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -rdynamic -fpatchable-function-entry=8 -o api_contract_validation api_contract_validation.c libludp.a -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fPIE -pie -rdynamic -fpatchable-function-entry=8 -o aslr_pie_validation aslr_pie_validation.c libludp.a -L. -lprobe_targets -Wl,-rpath,'$ORIGIN' -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -o probe_demo probe_demo.c libludp.a -ldl -L. -lprobe_targets -Wl,-rpath,'$ORIGIN' -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fno-builtin -o event_stream_demo event_stream_demo.c libludp.a -ldl -pthread -fsanitize=undefined -fno-sanitize-recover=all
+cc -O1 -g -Wall -Wextra -Werror -fno-strict-aliasing -fno-omit-frame-pointer -fsanitize=undefined -fno-sanitize-recover=all -pthread -fno-builtin -o getpid_benchmark getpid_benchmark.c libludp.a -ldl -pthread -fsanitize=undefined -fno-sanitize-recover=all
+
+exit_code: 0
+status: PASS
+elapsed_seconds: 2.652

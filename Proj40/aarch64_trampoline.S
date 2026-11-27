@@ -59,28 +59,33 @@
     add sp, sp, #256
 .endm
 
-/* Atomically add signed immediate to *address. Uses x13, w15. */
+/* Atomically add signed immediate to *address. Uses x13, w15.  These are
+ * counters, not publication locks: payload visibility is carried by the
+ * ready-slot STLR/reader acquire pair below, so relaxed exclusives avoid
+ * redundant barriers on the hit path. */
 .macro atomic_add address, amount
 .Latomic\@:
-    ldaxr x13, [\address]
+    ldxr x13, [\address]
     add x13, x13, #\amount
-    stlxr w15, x13, [\address]
+    stxr w15, x13, [\address]
     cbnz w15, .Latomic\@
 .endm
 
 /* x20=ring, x21=optional return slot. Result: x10=event, x11=ready,
- * x12=sequence. Acquire watermark before reusing a consumed event slot. */
+ * x12=sequence. A stale committed watermark can only cause a conservative
+ * drop; the sequence reservation itself needs atomicity but no ordering.
+ * Payload publication remains a release store in publish. */
 .macro reserve fail
 .Lreserve\@:
     add x16, x20, #64
-    ldar x9, [x16]
-    ldaxr x8, [x20]
+    ldr x9, [x16]
+    ldxr x8, [x20]
     sub x13, x8, x9
     ldr x14, [x20, #128]
     cmp x13, x14
     b.hs .Lfull\@
     add x13, x8, #1
-    stlxr w15, x13, [x20]
+    stxr w15, x13, [x20]
     cbnz w15, .Lreserve\@
     mov x12, x8
     ldr x14, [x20, #144]
@@ -229,10 +234,10 @@ ludp_tramp_start:
 .Lslot_search:
     add x17, x16, x10, lsl #8
     add x12, x17, #64
-    ldaxr x13, [x12]
+    ldxr x13, [x12]
     cbnz x13, .Lslot_busy
     mov x14, #1
-    stlxr w15, x14, [x12]
+    stxr w15, x14, [x12]
     cbnz w15, .Lslot_search
     mov x21, x17
     b .Lslot_found

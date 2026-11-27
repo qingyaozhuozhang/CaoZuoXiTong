@@ -197,11 +197,12 @@ ludp_tramp_start:
     movq %r11, %rsp
     popfq
     lock decq ludp_tramp_call_active(%rip)
-.Lentry_after_call:
     /* The callback is allowed to clobber all caller-saved GPRs.  Reload the
-     * ring base before the slot/event paths; the saved target registers are
-     * restored only at the final trampoline exit. */
+     * ring base only after a callback.  The ordinary hot path still has the
+     * value loaded before filtering, so repeating this load on every hit was
+     * pure overhead. */
     movq ludp_tramp_ring_ptr(%rip), %r8
+.Lentry_after_call:
     xorq %rdi, %rdi
     testq $2, ludp_tramp_flags(%rip)
     jz .Lentry_event

@@ -401,6 +401,19 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
 
     uint8_t reloc[32];
     fill_nops(reloc, sizeof reloc);
+    if (relocate_orig(p->orig, p->orig_len, addr,
+                      p->tramp + tl->reloc_off,
+                      reloc, sizeof reloc) < 0) {
+        p->used = 0;
+        if (!was_stopped) resume(c);
+        return -1;
+    }
+    /* A new head in an existing chain must fall through NOPs to the next
+     * trampoline.  For the first probe, however, install the already
+     * relocated instructions in the initial full-template write so the
+     * publication step does not write the same fields a second time. */
+    if (h >= 0)
+        fill_nops(reloc, sizeof reloc);
     if (tramp_build(c, p->tramp, p->id, c->ring_addr, addr + p->orig_len,
                     reloc, (int)sizeof reloc, flags, &p->filter,
                     &p->call) != 0) {
@@ -408,16 +421,15 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         if (!was_stopped) resume(c);
         return -1;
     }
-    if (relocate_orig(p->orig, p->orig_len, addr, p->tramp + tl->reloc_off,
-                      reloc, sizeof reloc) < 0) {
-        p->used = 0; if (!was_stopped) resume(c);
-        return -1;
-    }
     if (h >= 0) c->probes[h].chain_prev = idx;
     p->used = 1;
     if (idx == c->nprobes) ++c->nprobes;
 
-    if (rebuild_addr(c, addr) != 0) {
+    int publish_rc = h >= 0
+                         ? rebuild_addr(c, addr)
+                         : write_patch(c, addr, p->tramp,
+                                       p->orig, p->orig_len);
+    if (publish_rc != 0) {
         fprintf(stderr, "[probe] rebuild fail sym=%s\n", sym);
         c->nprobes = previous_count;
         p->used = 0;

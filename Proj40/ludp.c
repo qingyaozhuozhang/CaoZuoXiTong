@@ -477,7 +477,11 @@ static int stop_wait_pause(stop_wait *wait)
 {
     int64_t remaining = stop_wait_remaining(wait);
     if (remaining < 0) return -1;
-    if (wait->polls++ < 16) return 0;
+    /* A ptrace stop commonly lands just after the old 16-poll window.  Keep
+     * the control thread busy for a few more cheap nonblocking probes before
+     * paying a 50 us scheduler sleep.  This path runs only for structural
+     * operations, never for ordinary probe hits. */
+    if (wait->polls++ < 64) return 0;
     long delay = wait->polls < 256 ? 50000L : 1000000L;
     if (remaining < delay) delay = (long)remaining;
     struct timespec pause = { .tv_nsec = delay };

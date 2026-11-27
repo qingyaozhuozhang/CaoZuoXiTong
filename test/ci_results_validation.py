@@ -144,6 +144,13 @@ class CIResultsValidation(unittest.TestCase):
         self.assertEqual(list(self.root.glob(".ci-results-*")), [])
         self.assertEqual(list(self.package.glob(".ci-results-*")), [])
 
+    def symlink_or_skip(self, link, target, **kwargs):
+        """Create a symlink, or explicitly skip when the host forbids them."""
+        try:
+            link.symlink_to(target, **kwargs)
+        except (NotImplementedError, OSError) as exc:
+            self.skipTest(f"symbolic links are unavailable on this host: {exc}")
+
     def test_complete_run_preserves_four_artifacts_and_source_identity(self):
         run = run_fixture()
         self.assertEqual(self.synchronize(run), 0)
@@ -152,11 +159,12 @@ class CIResultsValidation(unittest.TestCase):
         self.assertEqual(metadata["run"]["run_attempt"], 1)
         self.assertEqual(metadata["missing_artifacts"], [])
         self.assertEqual(len(metadata["artifacts"]), 4)
-        self.assertIn("101", (self.destination / "report.md").read_text())
+        self.assertIn("101", (self.destination / "report.md").read_text(encoding="utf-8"))
         self.assertFalse((self.destination / "README.md").exists())
         for arch, profile in SYNC.MATRIX:
             directory = self.destination / arch / profile
-            summary = json.loads((directory / "ci/fixture-run/summary.json").read_text())
+            summary = json.loads(
+                (directory / "ci/fixture-run/summary.json").read_text(encoding="utf-8"))
             self.assertEqual((summary["architecture"], summary["profile"]), (arch, profile))
             self.assertTrue((directory / "runner/environment.log").is_file())
             self.assertTrue((directory / "ci/fixture-run/01-build.log").is_file())
@@ -164,10 +172,10 @@ class CIResultsValidation(unittest.TestCase):
 
     def test_new_run_replaces_all_previous_files(self):
         self.assertEqual(self.synchronize(), 0)
-        (self.destination / "stale-pass.md").write_text("Previous run only\n")
+        (self.destination / "stale-pass.md").write_text("Previous run only\n", encoding="utf-8")
         obsolete = self.destination / "arm64/full/obsolete"
         obsolete.mkdir()
-        (obsolete / "passed.log").write_text("Previous run only\n")
+        (obsolete / "passed.log").write_text("Previous run only\n", encoding="utf-8")
         self.assertEqual(self.synchronize(run_fixture(102)), 0)
         self.assertFalse((self.destination / "stale-pass.md").exists())
         self.assertFalse(obsolete.exists())
@@ -234,7 +242,12 @@ class CIResultsValidation(unittest.TestCase):
         symlink = zipfile.ZipInfo("ci/symlink")
         symlink.create_system = 3
         symlink.external_attr = (stat.S_IFLNK | 0o777) << 16
-        for name in ("../escape", "/absolute", "ci/../../escape", "ci\\escape", symlink):
+        unsafe_names = ["../escape", "/absolute", "ci/../../escape", symlink]
+        # zipfile normalizes backslashes to '/' on Windows before extraction,
+        # so the raw-backslash case is meaningful only on hosts that preserve it.
+        if SYNC.os.sep != "\\":
+            unsafe_names.append("ci\\escape")
+        for name in unsafe_names:
             with self.subTest(name=str(name)):
                 run = run_fixture(105)
                 api = FixtureAPI(run)
@@ -251,7 +264,7 @@ class CIResultsValidation(unittest.TestCase):
         previous = self.snapshot()
         staged = self.package / ".ci-results-candidate"
         staged.mkdir()
-        (staged / "latest.json").write_text("Synthetic replacement\n")
+        (staged / "latest.json").write_text("Synthetic replacement\n", encoding="utf-8")
         original_rename = Path.rename
 
         def fail_candidate_install(source, target):
@@ -318,7 +331,8 @@ class CIResultsValidation(unittest.TestCase):
 
     def test_unmanaged_destination_is_not_overwritten(self):
         self.destination.mkdir()
-        (self.destination / "user-data.txt").write_text("Preserve user content\n")
+        (self.destination / "user-data.txt").write_text(
+            "Preserve user content\n", encoding="utf-8")
         previous = self.snapshot()
         with self.assertRaises(RuntimeError):
             self.synchronize()
@@ -328,26 +342,29 @@ class CIResultsValidation(unittest.TestCase):
     def test_symlink_destination_is_not_followed(self):
         outside = self.root / "outside"
         outside.mkdir()
-        (outside / "user-data.txt").write_text("Preserve outside content\n")
-        (outside / SYNC.MARKER).write_text("Synthetic marker\n")
-        self.destination.symlink_to(outside, target_is_directory=True)
+        (outside / "user-data.txt").write_text(
+            "Preserve outside content\n", encoding="utf-8")
+        (outside / SYNC.MARKER).write_text("Synthetic marker\n", encoding="utf-8")
+        self.symlink_or_skip(self.destination, outside, target_is_directory=True)
         with self.assertRaisesRegex(RuntimeError, "符号链接"):
             self.synchronize()
         self.assertTrue(self.destination.is_symlink())
-        self.assertEqual((outside / "user-data.txt").read_text(), "Preserve outside content\n")
+        self.assertEqual((outside / "user-data.txt").read_text(encoding="utf-8"),
+                         "Preserve outside content\n")
         self.assert_no_temporary_results()
 
     def test_plain_file_destination_is_not_replaced(self):
-        self.destination.write_text("Preserve file\n")
+        self.destination.write_text("Preserve file\n", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "不是目录"):
             self.synchronize()
-        self.assertEqual(self.destination.read_text(), "Preserve file\n")
+        self.assertEqual(self.destination.read_text(encoding="utf-8"), "Preserve file\n")
         self.assert_no_temporary_results()
 
     def test_symlink_marker_does_not_authorize_replacement(self):
         self.destination.mkdir()
-        (self.destination / "user-data.txt").write_text("Preserve user content\n")
-        (self.destination / SYNC.MARKER).symlink_to(self.package / "README.md")
+        (self.destination / "user-data.txt").write_text(
+            "Preserve user content\n", encoding="utf-8")
+        self.symlink_or_skip(self.destination / SYNC.MARKER, self.package / "README.md")
         previous = self.snapshot()
         with self.assertRaisesRegex(RuntimeError, "非本工具管理"):
             self.synchronize()

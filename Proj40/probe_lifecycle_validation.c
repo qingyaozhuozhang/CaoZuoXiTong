@@ -2,6 +2,7 @@
 #include "ludp_internal.h"
 #include "validation_arch.h"
 #include <errno.h>
+#include <dlfcn.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <signal.h>
@@ -213,6 +214,140 @@ static int seccomp_session(void)
     return 0;
 }
 
+#if defined(__GLIBC__)
+/* musl deliberately keeps dlclose'd DSOs mapped. Exercise actual unload
+ * and reuse here on the supported glibc runners. */
+typedef struct {
+    atomic_int stage, advance;
+    uintptr_t entry;
+    unsigned char original[16];
+} unload_control;
+
+static void run_unload_child(unload_control *sync)
+{
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() == 1) _exit(2);
+    alarm(20);
+    void *handle = dlopen("./libprobe_targets.so", RTLD_NOW | RTLD_LOCAL);
+    if (!handle) _exit(3);
+    sync->entry = (uintptr_t)dlsym(handle, "six");
+    if (!sync->entry) _exit(4);
+    memcpy(sync->original, (const void *)sync->entry, sizeof sync->original);
+    atomic_store(&sync->stage, 1);
+    while (atomic_load(&sync->advance) < 1) validation_cpu_relax();
+    if (dlclose(handle)) _exit(5);
+    atomic_store(&sync->stage, 2);
+    while (atomic_load(&sync->advance) < 2) validation_cpu_relax();
+
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (page_size <= 0) _exit(6);
+    uintptr_t page = sync->entry & ~((uintptr_t)page_size - 1);
+    void *replacement = mmap((void *)page, (size_t)page_size,
+                             PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
+                             -1, 0);
+    if (replacement != (void *)page) _exit(7);
+    memset((void *)sync->entry, 0xa5, sizeof sync->original);
+    atomic_store(&sync->stage, 3);
+    while (atomic_load(&sync->advance) < 3) validation_cpu_relax();
+    if (munmap(replacement, (size_t)page_size)) _exit(8);
+
+    handle = dlopen("./libprobe_targets.so", RTLD_NOW | RTLD_LOCAL);
+    if (!handle) _exit(9);
+    uint64_t (*six)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t) =
+        dlsym(handle, "six");
+    if (!six) _exit(10);
+    sync->entry = (uintptr_t)six;
+    atomic_store(&sync->stage, 4);
+    while (atomic_load(&sync->advance) < 4) validation_cpu_relax();
+    if (six(1, 2, 3, 4, 5, 6) != 183) _exit(11);
+    atomic_store(&sync->stage, 5);
+    while (atomic_load(&sync->advance) < 5) validation_cpu_relax();
+    _exit(dlclose(handle) != 0);
+}
+
+static int unload_session(void)
+{
+    const char *library = "libprobe_targets.so";
+    int failed = 1, status = 0;
+    pid_t child = -1;
+    ludp_ctx *ctx = NULL;
+    u64 old[2], replacement_probe;
+    uintptr_t resolved;
+    unload_control *sync = mmap(NULL, sizeof *sync, PROT_READ | PROT_WRITE,
+                                MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (sync == MAP_FAILED) return -1;
+#define UNLOAD_CHECK(expr) do { if (!(expr)) { \
+    fprintf(stderr, "FAIL: dlclose line %d: %s (errno=%d)\n", \
+            __LINE__, #expr, errno); goto finish; } } while (0)
+    child = fork();
+    UNLOAD_CHECK(child >= 0);
+    if (!child) run_unload_child(sync);
+    UNLOAD_CHECK(!wait_value(&sync->stage, 1));
+    ctx = ludp_attach(child);
+    UNLOAD_CHECK(ctx);
+    UNLOAD_CHECK(!ludp_probe_add(ctx, library, "six", &old[0]));
+    UNLOAD_CHECK(!ludp_probe_add(ctx, library, "six", &old[1]));
+    UNLOAD_CHECK(!ludp_resume(ctx));
+    atomic_store(&sync->advance, 1);
+
+    UNLOAD_CHECK(!wait_value(&sync->stage, 2));
+    UNLOAD_CHECK(ludp_resolve(ctx, library, "six", &resolved) == -1);
+    UNLOAD_CHECK(ludp_probe_enable(ctx, old[0]) == -1 && errno == ESTALE);
+    UNLOAD_CHECK(!ludp_probe_remove(ctx, old[0]));
+    atomic_store(&sync->advance, 2);
+    UNLOAD_CHECK(!wait_value(&sync->stage, 3));
+
+    /* Deliberately reuse the entry address for tracee-owned data. */
+    unsigned char actual[sizeof sync->original], marker[sizeof sync->original];
+    memset(marker, 0xa5, sizeof marker);
+    UNLOAD_CHECK(ludp_probe_set_filter(ctx, old[1], NULL) == -1 && errno == ESTALE);
+    UNLOAD_CHECK(!ludp_probe_remove(ctx, old[1]) && ludp_probe_count(ctx) == 0);
+    UNLOAD_CHECK(!ludp_mem_read(ctx, sync->entry, actual, sizeof actual) &&
+                 !memcmp(actual, marker, sizeof actual));
+    atomic_store(&sync->advance, 3);
+    UNLOAD_CHECK(!wait_value(&sync->stage, 4));
+
+    UNLOAD_CHECK(!ludp_probe_add_ex(ctx, library, "six",
+                                   LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN,
+                                   &replacement_probe));
+    atomic_store(&sync->advance, 4);
+    UNLOAD_CHECK(!wait_value(&sync->stage, 5));
+    ludp_event events[4];
+    int count = 0;
+    UNLOAD_CHECK(!ludp_events_read(ctx, events, 4, &count) && count == 2 &&
+                 events[0].probe_id == replacement_probe &&
+                 events[1].probe_id == replacement_probe && events[1].retval == 183);
+    UNLOAD_CHECK(!ludp_probe_remove(ctx, replacement_probe));
+    UNLOAD_CHECK(!ludp_mem_read(ctx, sync->entry, actual, sizeof actual) &&
+                 !memcmp(actual, sync->original, sizeof actual));
+    UNLOAD_CHECK(!ludp_detach(ctx));
+    ctx = NULL;
+    atomic_store(&sync->advance, 5);
+    pid_t waited;
+    do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    UNLOAD_CHECK(waited == child);
+    child = -1;
+    UNLOAD_CHECK(WIFEXITED(status) && !WEXITSTATUS(status));
+    puts("dlclose with active probes, address reuse and reload: PASS");
+    failed = 0;
+finish:
+    if (ctx) (void)ludp_detach(ctx);
+    if (child > 0) {
+        kill(child, SIGKILL);
+        while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    }
+    munmap(sync, sizeof *sync);
+    return failed;
+#undef UNLOAD_CHECK
+}
+#else
+static int unload_session(void)
+{
+    puts("actual dlclose unload: SKIP (requires glibc)");
+    return 0;
+}
+#endif
+
 int main(void)
 {
     ctl = mmap(NULL, sizeof *ctl, PROT_READ | PROT_WRITE,
@@ -245,6 +380,7 @@ int main(void)
     do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
     if (failed || waited != child || !WIFEXITED(status) || WEXITSTATUS(status)) failed = 1;
     if (!failed && seccomp_session()) failed = 1;
+    if (!failed && unload_session()) failed = 1;
     munmap(ctl, sizeof *ctl);
     if (failed) return 1;
     puts("PASS F4/F5: four sessions, original bytes, mappings, switches, active return, stop timeout and huge-page hint/fallback");

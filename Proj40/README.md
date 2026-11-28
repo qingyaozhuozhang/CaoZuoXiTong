@@ -53,7 +53,7 @@ python3 scripts/run_demo.py --full
 | `callback_validation.c` / `callback_validation` | 目标进程内回调、现场恢复与忙时保护 |
 | `thread_signal_validation.c` / `thread_signal_validation` | 已有线程、阻塞状态、线程退出及信号交付 |
 | `api_contract_validation.c` / `api_contract_validation` | 公共 API 错误契约及主程序 ELF 符号解析 |
-| `aslr_pie_validation.c` / `aslr_pie_validation` | 8 次独立 exec 后的 PIE/动态库地址解析与实际探针验证 |
+| `aslr_pie_validation.c` / `aslr_pie_validation` | 独立 exec 后的 PIE/动态库地址验证，以及探针生效时主线程和工作线程 exec 后的分离与重新附加 |
 | `probe_demo.c` / `probe_demo` | 可读的动态库函数入口、六参数与返回值演示 |
 | `event_stream_demo.c` / `event_stream_demo` | 固定 CPU 采集 libc getpid，导出带单调时间的 perf-script 风格事件 |
 | `getpid_benchmark.c` / `getpid_benchmark` | 百万次 getpid 的无探针、用户态探针与内核 uprobe 基准 |

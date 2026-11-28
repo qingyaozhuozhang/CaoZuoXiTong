@@ -50,12 +50,20 @@ typedef struct {
 } ludp_raw_event;
 
 typedef struct {
+    unsigned dev_major, dev_minor;
+    unsigned long long inode;
+    unsigned long long offset;
+} probe_mapping;
+
+typedef struct {
     int used;
     u64 id;
     char sym[128];
     char lib[128];
     uintptr_t addr;
     uintptr_t tramp;        /* trampoline entry address in the tracee */
+    probe_mapping mapping;  /* backing object and file offset at addr */
+    bool site_lost;          /* entry unmapped or no longer our patch */
     int orig_len;
     uint8_t orig[32];
     int chain_next;         /* index of the next (older) probe at same addr, -1 */
@@ -103,6 +111,7 @@ struct ludp_ctx {
     bool closing;
     bool unsafe_state;     /* failed ptrace rollback: never resume scratch state */
     pid_t pid;
+    pid_t exec_tid;         /* stopped replacement image, if observed */
     int memfd;              /* /proc/<pid>/mem, O_RDWR */
     bool fsgsbase;
     bool xsave;

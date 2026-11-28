@@ -3,6 +3,7 @@
 #include "ludp.h"
 #include "validation_arch.h"
 #include <errno.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -17,7 +18,7 @@
 
 extern uint64_t six(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
 typedef struct {
-    atomic_int ready, go, done, release, error;
+    atomic_int ready, go, done, release, error, old_ready, replace;
     uintptr_t main_address, library_address;
 } control_t;
 
@@ -152,6 +153,123 @@ cleanup:
 #undef REQUIRE
 }
 
+static void *replace_image(void *opaque)
+{
+    int fd = *(int *)opaque;
+    char descriptor[32];
+    snprintf(descriptor, sizeof descriptor, "%d", fd);
+    execl("/proc/self/exe", "aslr_pie_validation", "--target", descriptor, (char *)NULL);
+    _exit(127);
+}
+
+/* Cover a leader exec discovered by detach itself and a non-leader exec
+ * discovered by poll. In the latter case Linux moves the trace stop to TGID. */
+static int run_live_exec(bool worker)
+{
+    int fd = -1, status = 0, failed = 1;
+    pid_t child = -1;
+    control_t *ctl = MAP_FAILED;
+    ludp_ctx *ctx = NULL;
+    u64 probe;
+    uintptr_t entry;
+#define EXEC_CHECK(condition) do { if (!(condition)) { \
+    fprintf(stderr, "FAIL: live exec worker=%d line %d: %s (errno=%d)\n", \
+            worker, __LINE__, #condition, errno); goto cleanup; } } while (0)
+
+    fd = memfd_create("ludp-live-exec", 0);
+    EXEC_CHECK(fd >= 0 && ftruncate(fd, sizeof(*ctl)) == 0);
+    ctl = mmap(NULL, sizeof(*ctl), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    EXEC_CHECK(ctl != MAP_FAILED);
+    child = fork();
+    EXEC_CHECK(child >= 0);
+    if (child == 0) {
+        if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() == 1) _exit(126);
+        alarm(20);
+        atomic_store(&ctl->old_ready, 1);
+        while (!atomic_load(&ctl->replace)) validation_cpu_relax();
+        if (!worker) replace_image(&fd);
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, replace_image, &fd)) _exit(126);
+        pthread_join(thread, NULL);
+        _exit(126);
+    }
+
+    uint64_t deadline = now_ms() + 5000;
+    while (!atomic_load(&ctl->old_ready) && now_ms() < deadline) usleep(100);
+    EXEC_CHECK(atomic_load(&ctl->old_ready));
+    ctx = ludp_attach(child);
+    EXEC_CHECK(ctx);
+    EXEC_CHECK(!ludp_resolve(ctx, NULL, "aslr_target", &entry));
+    EXEC_CHECK(!ludp_probe_add_ex(ctx, NULL, "aslr_target",
+                                 LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN, &probe));
+    EXEC_CHECK(!ludp_resume(ctx));
+    atomic_store(&ctl->replace, 1);
+
+    deadline = now_ms() + 5000;
+    if (worker) {
+        int rc = 0;
+        while ((rc = ludp_poll(ctx)) >= 0 && now_ms() < deadline) usleep(100);
+        EXEC_CHECK(rc == -1 && errno == ESTALE);
+        EXEC_CHECK(ludp_resume(ctx) == -1 && errno == ESTALE);
+        EXEC_CHECK(ludp_probe_remove(ctx, probe) == -1 && errno == ESTALE);
+    } else {
+        /* Peek at the stop without consuming it on behalf of the library. */
+        siginfo_t stop = {0};
+        do {
+            EXEC_CHECK(waitid(P_PID, child, &stop, WSTOPPED | WNOHANG | WNOWAIT) == 0);
+            if (!stop.si_pid) usleep(100);
+        } while (!stop.si_pid && now_ms() < deadline);
+        EXEC_CHECK(stop.si_pid == child && stop.si_code == CLD_TRAPPED);
+        unsigned char byte;
+        EXEC_CHECK(ludp_mem_read(ctx, entry, &byte, sizeof byte) == -1 && errno == ESTALE);
+    }
+
+    EXEC_CHECK(!ludp_detach(ctx));
+    ctx = NULL;
+    deadline = now_ms() + 5000;
+    while (!atomic_load(&ctl->ready) && now_ms() < deadline) usleep(100);
+    EXEC_CHECK(atomic_load(&ctl->ready));
+
+    /* The same PID can be attached anew, with symbols resolved in the new mm. */
+    ctx = ludp_attach(child);
+    EXEC_CHECK(ctx);
+    EXEC_CHECK(ludp_probe_count(ctx) == 0);
+    EXEC_CHECK(!ludp_resolve(ctx, NULL, "aslr_target", &entry) && entry == ctl->main_address);
+    EXEC_CHECK(!ludp_probe_add(ctx, NULL, "aslr_target", &probe));
+    EXEC_CHECK(!ludp_resume(ctx));
+    atomic_store(&ctl->go, 1);
+    deadline = now_ms() + 5000;
+    while (!atomic_load(&ctl->done) && now_ms() < deadline) usleep(100);
+    EXEC_CHECK(atomic_load(&ctl->done) && !atomic_load(&ctl->error));
+
+    ludp_event event;
+    int count = 0;
+    EXEC_CHECK(!ludp_events_read(ctx, &event, 1, &count) && count == 1 &&
+               event.type == LUDP_EVENT_ENTRY && event.probe_id == probe);
+    EXEC_CHECK(!ludp_detach(ctx));
+    ctx = NULL;
+    atomic_store(&ctl->release, 1);
+    pid_t waited;
+    do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    EXEC_CHECK(waited == child);
+    child = -1;
+    EXEC_CHECK(WIFEXITED(status) && !WEXITSTATUS(status));
+    printf("active probe across %s exec, detach and reattach: PASS\n",
+           worker ? "worker" : "leader");
+    failed = 0;
+
+cleanup:
+    if (ctx) (void)ludp_detach(ctx);
+    if (child > 0) {
+        kill(child, SIGKILL);
+        while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
+    }
+    if (ctl != MAP_FAILED) munmap(ctl, sizeof(*ctl));
+    if (fd >= 0) close(fd);
+    return failed;
+#undef EXEC_CHECK
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 3 && !strcmp(argv[1], "--target")) return target_main(atoi(argv[2]));
@@ -169,5 +287,5 @@ int main(int argc, char **argv)
         return 1;
     }
     puts("independent exec / ASLR / PIE: PASS (8 fresh images, both mappings varied)");
-    return 0;
+    return run_live_exec(false) | run_live_exec(true);
 }

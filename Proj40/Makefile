@@ -39,8 +39,8 @@ instruction_validation: instruction_validation.c libludp.a
 probe_abi_validation: probe_abi_validation.c $(ABI_SENTINEL) libprobe_targets.so libludp.a
 	$(CC) $(CFLAGS) -rdynamic -o $@ probe_abi_validation.c $(ABI_SENTINEL) libludp.a -ldl -L. -lprobe_targets -Wl,-rpath,'$$ORIGIN' $(LDFLAGS)
 
-probe_lifecycle_validation: probe_lifecycle_validation.c libludp.a
-	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -o $@ $< libludp.a $(LDFLAGS)
+probe_lifecycle_validation: probe_lifecycle_validation.c libludp.a libprobe_targets.so
+	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -o $@ $< libludp.a -ldl $(LDFLAGS)
 
 multiprobe_validation: multiprobe_validation.c libludp.a
 	$(CC) $(CFLAGS) -fpatchable-function-entry=8 -fno-ipa-icf -o $@ $< libludp.a $(LDFLAGS)

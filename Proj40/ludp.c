@@ -33,7 +33,7 @@
 #include "ludp_internal.h"
 
 #define PTRACE_OPTS (PTRACE_O_TRACECLONE | PTRACE_O_EXITKILL | \
-                     PTRACE_O_TRACESYSGOOD)
+                     PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEEXEC)
 #define SEIZE_RETRY_COUNT 50
 
 /* trampoline template symbols (copied verbatim into the tracee) */
@@ -83,7 +83,7 @@ int mem_read(ludp_ctx *c, uintptr_t addr, void *buf, size_t len)
     if (len == 0)
         return 0;
     /* 大块缓冲区优先单次跨进程复制；不可用时仍支持 /proc/pid/mem。 */
-    if (len >= 16384 && bulk_io_enabled()) {
+    if (c->stopped && len >= 16384 && bulk_io_enabled()) {
         struct iovec local = { .iov_base = buf, .iov_len = len };
         struct iovec remote = { .iov_base = (void *)addr, .iov_len = len };
         if (process_vm_readv(c->pid, &local, 1, &remote, 1, 0) == (ssize_t)len)
@@ -92,6 +92,12 @@ int mem_read(ludp_ctx *c, uintptr_t addr, void *buf, size_t len)
     ssize_t r = pread(c->memfd, buf, len, (off_t)addr);
     if (r == (ssize_t)len)
         return 0;
+    /* The proc file pins the old mm across exec. The ptrace fallback instead
+     * uses the live task, so only use it after all ptrace stops are known. */
+    if (!c->stopped || r == 0) {
+        if (r >= 0) errno = r == 0 ? ESTALE : EIO;
+        return -1;
+    }
     fprintf(stderr, "[mem_read] pread len=%zu got=%zd errno=%d addr=0x%lx\n",
             len, r, errno, (unsigned long)addr);
 
@@ -121,7 +127,7 @@ int mem_write(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len)
      * /proc/pid/mem and ptrace both use this hook; process_vm_writev does not.
      * A single pwrite still copies the entire return-slot arena efficiently. */
 #if defined(__x86_64__)
-    if (len >= 16384 && bulk_io_enabled()) {
+    if (c->stopped && len >= 16384 && bulk_io_enabled()) {
         struct iovec local = { .iov_base = (void *)buf, .iov_len = len };
         struct iovec remote = { .iov_base = (void *)addr, .iov_len = len };
         if (process_vm_writev(c->pid, &local, 1, &remote, 1, 0) == (ssize_t)len)
@@ -131,6 +137,12 @@ int mem_write(ludp_ctx *c, uintptr_t addr, const void *buf, size_t len)
     ssize_t r = pwrite(c->memfd, buf, len, (off_t)addr);
     if (r == (ssize_t)len)
         return 0;
+    /* The proc file pins the old mm across exec. The ptrace fallback instead
+     * uses the live task, so only use it after all ptrace stops are known. */
+    if (!c->stopped || r == 0) {
+        if (r >= 0) errno = r == 0 ? ESTALE : EIO;
+        return -1;
+    }
 
     /* fallback: PTRACE_POKEDATA, read-modify-write for unaligned tails */
     const uint8_t *b = buf;
@@ -515,11 +527,32 @@ static bool all_threads_stopped(const ludp_ctx *c)
     return any;
 }
 
+/* The kernel has discarded the old mm before publishing the exec stop.
+ * Leave the new process stopped until the caller detaches this old session. */
+static void observe_exec(ludp_ctx *c, pid_t tid)
+{
+    c->exec_tid = tid;
+    int i = tid_index(c, tid);
+    if (i >= 0) {
+        c->thread_stopped[i] = true;
+        c->pending_sigs[i] = 0;
+    }
+    c->stopped = true;
+    if (c->memfd >= 0) {
+        close(c->memfd);
+        c->memfd = -1;
+    }
+}
+
 /* Resume only stops whose wait status has already been consumed.  Keeping
  * this state per tid makes a failed/partial resume recoverable by the next
  * quiesce instead of silently stranding one thread. */
 static int resume_known_stops(ludp_ctx *c)
 {
+    if (c->exec_tid) {
+        errno = ESTALE;
+        return -1;
+    }
     if (c->unsafe_state) {
         errno = EIO;
         return -1;
@@ -573,6 +606,10 @@ int quiesce(ludp_ctx *c)
 {
     if (!c) {
         errno = EINVAL;
+        return -1;
+    }
+    if (c->exec_tid) {
+        errno = ESTALE;
         return -1;
     }
     if (c->unsafe_state) {
@@ -637,6 +674,12 @@ int quiesce(ludp_ctx *c)
                 if (wi >= 0)
                     c->thread_stopped[wi] = true;
                 int ev = (st >> 16) & 0xffff;
+                if (ev == PTRACE_EVENT_EXEC) {
+                    observe_exec(c, w);
+                    free(pending);
+                    errno = ESTALE;
+                    return -1;
+                }
                 if (ev == PTRACE_EVENT_CLONE) {
                     unsigned long nt = 0;
                     if (ptrace(PTRACE_GETEVENTMSG, w, 0, &nt) == 0 && nt > 0) {
@@ -746,6 +789,10 @@ int ludp_poll(ludp_ctx *c)
         errno = EINVAL;
         return -1;
     }
+    if (c->exec_tid) {
+        errno = ESTALE;
+        return -1;
+    }
     if (c->unsafe_state) {
         errno = EIO;
         return -1;
@@ -768,12 +815,16 @@ int ludp_poll(ludp_ctx *c)
         if (!WIFSTOPPED(st))
             continue;
 
+        int ev = (st >> 16) & 0xffff;
+        if (ev == PTRACE_EVENT_EXEC) {
+            observe_exec(c, w);
+            errno = ESTALE;
+            return -1;
+        }
         int wi = tid_index(c, w);
         if (wi >= 0)
             c->thread_stopped[wi] = true;
         update_thread_fsbase(c, w);
-
-        int ev = (st >> 16) & 0xffff;
         if (ev == PTRACE_EVENT_CLONE) {
             /* pthread_create(): new thread is already traced + stopped. */
             unsigned long nt = 0;
@@ -1908,6 +1959,37 @@ int return_slots_init(ludp_ctx *c)
     return rc;
 }
 
+static void free_local_context(ludp_ctx *c)
+{
+    if (c->memfd >= 0)
+        close(c->memfd);
+    free(c->tids);
+    free(c->seized);
+    free(c->thread_stopped);
+    free(c->pending_sigs);
+    free(c->fsbases);
+    while (c->mappings) {
+        owned_mapping *next = c->mappings->next;
+        free(c->mappings);
+        c->mappings = next;
+    }
+    while (c->retired) {
+        retired_slot *next = c->retired->next;
+        free(c->retired);
+        c->retired = next;
+    }
+    free(c);
+}
+
+/* A successful detach releases the exec stop without using the old registry. */
+static int detach_after_exec(ludp_ctx *c)
+{
+    if (ptrace(PTRACE_DETACH, c->exec_tid, 0, 0) && errno != ESRCH)
+        return -1;
+    free_local_context(c);
+    return 0;
+}
+
 ludp_ctx *ludp_attach(pid_t pid)
 {
     int attach_error;
@@ -1921,18 +2003,10 @@ ludp_ctx *ludp_attach(pid_t pid)
     c->pid = pid;
     c->memfd = -1;
 
-    char mp[64];
-    snprintf(mp, sizeof mp, "/proc/%d/mem", pid);
-    c->memfd = open(mp, O_RDWR);
-    if (c->memfd < 0) {
-        free(c);
-        return NULL;
-    }
     c->fsgsbase = cpu_has_fsgsbase();
     configure_xsave(c);
 
     if (seize_thread(pid, false) != 0) {
-        close(c->memfd);
         free(c);
         return NULL;
     }
@@ -1946,6 +2020,13 @@ ludp_ctx *ludp_attach(pid_t pid)
     if (threads_refresh(c) != 0)
         goto fail;
     if (quiesce(c) != 0)
+        goto fail;
+
+    /* Select the mm only after reaching a known-good ptrace stop. */
+    char mp[64];
+    snprintf(mp, sizeof mp, "/proc/%d/mem", pid);
+    c->memfd = open(mp, O_RDWR | O_CLOEXEC);
+    if (c->memfd < 0)
         goto fail;
 
     c->syscall_insn = find_syscall_insn(c);
@@ -2012,19 +2093,7 @@ fail:
             ptrace(PTRACE_DETACH, c->tids[i], 0,
                    (void *)(uintptr_t)c->pending_sigs[i]);
     }
-    if (c->memfd >= 0)
-        close(c->memfd);
-    free(c->tids);
-    free(c->seized);
-    free(c->thread_stopped);
-    free(c->pending_sigs);
-    free(c->fsbases);
-    while (c->mappings) {
-        owned_mapping *next = c->mappings->next;
-        free(c->mappings);
-        c->mappings = next;
-    }
-    free(c);
+    free_local_context(c);
     errno = attach_error;
     return NULL;
 }
@@ -2032,9 +2101,11 @@ fail:
 int ludp_detach(ludp_ctx *c)
 {
     if (!c) return 0;
+    if (c->exec_tid) return detach_after_exec(c);
     if (c->unsafe_state) { errno = EIO; return -1; }
     bool running = !c->stopped;
-    if (quiesce(c)) return -1;
+    if (quiesce(c))
+        return c->exec_tid ? detach_after_exec(c) : -1;
     if (!c->closing && probe_storage_idle(c)) {
         int err = errno;
         if (running) resume(c);
@@ -2057,14 +2128,7 @@ int ludp_detach(ludp_ctx *c)
         c->thread_stopped[i] = false;
         c->pending_sigs[i] = 0;
     }
-    if (c->memfd >= 0)
-        close(c->memfd);
-    free(c->tids);
-    free(c->seized);
-    free(c->thread_stopped);
-    free(c->pending_sigs);
-    free(c->fsbases);
-    free(c);
+    free_local_context(c);
     return 0;
 }
 
@@ -2072,6 +2136,10 @@ int ludp_detach(ludp_ctx *c)
 
 static int require_ctx(const ludp_ctx *c)
 {
+    if (c && c->exec_tid) {
+        errno = ESTALE;
+        return -1;
+    }
     if (!c || !c->attached || c->memfd < 0) {
         errno = EINVAL;
         return -1;
@@ -2081,9 +2149,9 @@ static int require_ctx(const ludp_ctx *c)
 
 int ludp_resolve(ludp_ctx *c, const char *lib, const char *sym, uintptr_t *addr)
 {
-    if (require_ctx(c) || !sym || !*sym || !addr) {
-        if (c && c->attached && c->memfd >= 0)
-            errno = EINVAL;
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !addr) {
+        errno = EINVAL;
         return -1;
     }
     return elf_resolve(c->pid, lib, sym, addr, NULL, 0);
@@ -2091,23 +2159,20 @@ int ludp_resolve(ludp_ctx *c, const char *lib, const char *sym, uintptr_t *addr)
 
 int ludp_probe_add(ludp_ctx *c, const char *lib, const char *sym, u64 *id_out)
 {
-    uintptr_t addr;
-    if (require_ctx(c) || !sym || !*sym) {
-        if (c && c->attached && c->memfd >= 0)
-            errno = EINVAL;
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym) {
+        errno = EINVAL;
         return -1;
     }
-    if (elf_resolve(c->pid, lib, sym, &addr, NULL, 0) != 0)
-        return -1;
-    return probe_add_internal(c, sym, (lib && lib[0]) ? lib : "", addr,
+    return probe_add_internal(c, sym, (lib && lib[0]) ? lib : "", 0,
                               LUDP_PROBE_ENTRY, NULL, NULL, id_out);
 }
 
 int ludp_probe_add_addr(ludp_ctx *c, const char *sym, uintptr_t addr, u64 *id_out)
 {
-    if (require_ctx(c) || !sym || !*sym || !addr) {
-        if (c && c->attached && c->memfd >= 0)
-            errno = EINVAL;
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !addr) {
+        errno = EINVAL;
         return -1;
     }
     return probe_add_internal(c, sym, "", addr, LUDP_PROBE_ENTRY, NULL, NULL,
@@ -2116,22 +2181,20 @@ int ludp_probe_add_addr(ludp_ctx *c, const char *sym, uintptr_t addr, u64 *id_ou
 
 int ludp_probe_add_ex(ludp_ctx *c, const char *lib, const char *sym, unsigned flags, u64 *id_out)
 {
-    uintptr_t addr;
-    if (require_ctx(c) || !sym || !*sym) {
-        if (c && c->attached && c->memfd >= 0)
-            errno = EINVAL;
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym) {
+        errno = EINVAL;
         return -1;
     }
-    if (elf_resolve(c->pid, lib, sym, &addr, NULL, 0)) return -1;
-    return probe_add_internal(c, sym, lib ? lib : "", addr, flags, NULL, NULL,
+    return probe_add_internal(c, sym, lib ? lib : "", 0, flags, NULL, NULL,
                               id_out);
 }
 
 int ludp_probe_add_addr_ex(ludp_ctx *c, const char *sym, uintptr_t addr, unsigned flags, u64 *id_out)
 {
-    if (require_ctx(c) || !sym || !*sym || !addr) {
-        if (c && c->attached && c->memfd >= 0)
-            errno = EINVAL;
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !addr) {
+        errno = EINVAL;
         return -1;
     }
     return probe_add_internal(c, sym, "", addr, flags, NULL, NULL, id_out);
@@ -2141,15 +2204,12 @@ int ludp_probe_add_filtered_ex(ludp_ctx *c, const char *lib, const char *sym,
                                unsigned flags, const ludp_filter *filter,
                                u64 *id_out)
 {
-    uintptr_t addr;
-    if (require_ctx(c) || !sym || !*sym || !filter) {
-        if (c && c->attached && c->memfd >= 0)
-            errno = EINVAL;
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !filter) {
+        errno = EINVAL;
         return -1;
     }
-    if (elf_resolve(c->pid, lib, sym, &addr, NULL, 0))
-        return -1;
-    return probe_add_internal(c, sym, lib ? lib : "", addr, flags,
+    return probe_add_internal(c, sym, lib ? lib : "", 0, flags,
                               filter, NULL, id_out);
 }
 
@@ -2157,7 +2217,8 @@ int ludp_probe_add_addr_filtered_ex(ludp_ctx *c, const char *sym,
                                     uintptr_t addr, unsigned flags,
                                     const ludp_filter *filter, u64 *id_out)
 {
-    if (require_ctx(c) || !sym || !*sym || !addr || !filter) {
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !addr || !filter) {
         errno = EINVAL;
         return -1;
     }
@@ -2168,15 +2229,12 @@ int ludp_probe_add_call_ex(ludp_ctx *c, const char *lib, const char *sym,
                            unsigned flags, const ludp_filter *filter,
                            const ludp_call_action *call, u64 *id_out)
 {
-    uintptr_t addr;
-    if (require_ctx(c) || !sym || !*sym || !call || !call->function) {
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !call || !call->function) {
         errno = EINVAL;
         return -1;
     }
-    if (elf_resolve(c->pid, lib, sym, &addr, NULL, 0)) {
-        return -1;
-    }
-    return probe_add_internal(c, sym, lib ? lib : "", addr, flags,
+    return probe_add_internal(c, sym, lib ? lib : "", 0, flags,
                               filter, call, id_out);
 }
 
@@ -2185,7 +2243,8 @@ int ludp_probe_add_addr_call_ex(ludp_ctx *c, const char *sym,
                                 const ludp_filter *filter,
                                 const ludp_call_action *call, u64 *id_out)
 {
-    if (require_ctx(c) || !sym || !*sym || !addr || !call ||
+    if (require_ctx(c)) return -1;
+    if (!sym || !*sym || !addr || !call ||
         !call->function) {
         errno = EINVAL;
         return -1;
@@ -2202,7 +2261,8 @@ u64 ludp_return_missed(ludp_ctx *c)
 
 int ludp_probe_remove(ludp_ctx *c, u64 id)
 {
-    if (require_ctx(c) || !id) {
+    if (require_ctx(c)) return -1;
+    if (!id) {
         errno = EINVAL;
         return -1;
     }
@@ -2211,7 +2271,8 @@ int ludp_probe_remove(ludp_ctx *c, u64 id)
 
 int ludp_probe_enable(ludp_ctx *c, u64 id)
 {
-    if (require_ctx(c) || !id) {
+    if (require_ctx(c)) return -1;
+    if (!id) {
         errno = EINVAL;
         return -1;
     }
@@ -2220,7 +2281,8 @@ int ludp_probe_enable(ludp_ctx *c, u64 id)
 
 int ludp_probe_disable(ludp_ctx *c, u64 id)
 {
-    if (require_ctx(c) || !id) {
+    if (require_ctx(c)) return -1;
+    if (!id) {
         errno = EINVAL;
         return -1;
     }
@@ -2240,7 +2302,8 @@ int ludp_probe_count(ludp_ctx *c)
 
 int ludp_probe_list(ludp_ctx *c, ludp_probe_info *out, int max)
 {
-    if (require_ctx(c) || max < 0 || (max > 0 && !out)) {
+    if (require_ctx(c)) return -1;
+    if (max < 0 || (max > 0 && !out)) {
         errno = EINVAL;
         return -1;
     }
@@ -2268,7 +2331,8 @@ int ludp_probe_list(ludp_ctx *c, ludp_probe_info *out, int max)
 
 int ludp_probe_get_config(ludp_ctx *c, u64 id, ludp_probe_config *out)
 {
-    if (require_ctx(c) || !id || !out) {
+    if (require_ctx(c)) return -1;
+    if (!id || !out) {
         errno = EINVAL;
         return -1;
     }
@@ -2289,7 +2353,8 @@ int ludp_probe_get_config(ludp_ctx *c, u64 id, ludp_probe_config *out)
 
 int ludp_probe_update(ludp_ctx *c, u64 id, const ludp_probe_config *config)
 {
-    if (require_ctx(c) || !id || !config) {
+    if (require_ctx(c)) return -1;
+    if (!id || !config) {
         errno = EINVAL;
         return -1;
     }
@@ -2316,8 +2381,9 @@ int ludp_probe_set_call(ludp_ctx *c, u64 id, const ludp_call_action *call)
 
 int ludp_events_read(ludp_ctx *c, ludp_event *out, int max, int *n)
 {
-    if (require_ctx(c) || max < 0 || (max > 0 && !out)) {
-        if (n) *n = 0;
+    if (n) *n = 0;
+    if (require_ctx(c)) return -1;
+    if (max < 0 || (max > 0 && !out)) {
         errno = EINVAL;
         return -1;
     }

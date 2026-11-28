@@ -35,6 +35,38 @@ int filter_normalize(ludp_filter *filter)
     return 0;
 }
 
+/* Find the backing identity at an address while the tracee is stopped.
+ * Use the file offset at the address so a permission split is harmless. */
+static int mapping_at(ludp_ctx *c, uintptr_t addr, size_t size,
+                      probe_mapping *identity, bool *executable)
+{
+    char path[64], line[1024];
+    snprintf(path, sizeof path, "/proc/%d/maps", c->pid);
+    FILE *maps = fopen(path, "r");
+    if (!maps) return -1;
+
+    int found = 0;
+    while (fgets(line, sizeof line, maps)) {
+        unsigned long start, end;
+        char perms[5];
+        probe_mapping entry;
+        if (sscanf(line, "%lx-%lx %4s %llx %x:%x %llu", &start, &end, perms,
+                   &entry.offset, &entry.dev_major, &entry.dev_minor,
+                   &entry.inode) != 7 || addr < start || addr >= end ||
+            size > end - addr)
+            continue;
+        entry.offset += addr - start;
+        if (identity) *identity = entry;
+        if (executable) *executable = perms[2] == 'x';
+        found = 1;
+        break;
+    }
+    int error = ferror(maps) ? (errno ? errno : EIO) : 0;
+    fclose(maps);
+    if (error) { errno = error; return -1; }
+    return found;
+}
+
 int call_action_normalize(ludp_ctx *c, ludp_call_action *call)
 {
     if (!c || !call) {
@@ -46,26 +78,10 @@ int call_action_normalize(ludp_ctx *c, ludp_call_action *call)
         return 0;
     }
 
-    char path[64];
-    snprintf(path, sizeof path, "/proc/%d/maps", c->pid);
-    FILE *maps = fopen(path, "r");
-    if (!maps)
-        return -1;
-    char line[512], perms[5];
-    unsigned long start, end;
-    while (fgets(line, sizeof line, maps)) {
-        if (sscanf(line, "%lx-%lx %4s", &start, &end, perms) != 3)
-            continue;
-        if (call->function >= (uintptr_t)start &&
-            call->function < (uintptr_t)end) {
-            fclose(maps);
-            if (perms[2] == 'x')
-                return 0;
-            errno = EACCES;
-            return -1;
-        }
-    }
-    fclose(maps);
+    bool executable = false;
+    int found = mapping_at(c, call->function, 1, NULL, &executable);
+    if (found < 0) return -1;
+    if (found && executable) return 0;
     errno = EACCES;
     return -1;
 }
@@ -117,14 +133,13 @@ static void fill_nops(uint8_t *code, size_t size)
 #endif
 }
 
-/* Write a native direct branch, or restore original bytes when target==0. */
-static int write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
-                       const uint8_t *orig, int orig_len)
+/* Encode the exact entry bytes owned by this probe chain. */
+static int encode_patch(uintptr_t addr, uintptr_t target,
+                        const uint8_t *orig, int orig_len, uint8_t code[32])
 {
-    uint8_t code[32];
     if (target == 0) {
         memcpy(code, orig, (size_t)orig_len);
-        return mem_write(c, addr, code, (size_t)orig_len);
+        return 0;
     }
     fill_nops(code, (size_t)orig_len);
 #ifdef __aarch64__
@@ -142,6 +157,14 @@ static int write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
     int32_t r32 = (int32_t)rel;
     memcpy(code + 1, &r32, 4);
 #endif
+    return 0;
+}
+
+static int write_patch(ludp_ctx *c, uintptr_t addr, uintptr_t target,
+                       const uint8_t *orig, int orig_len)
+{
+    uint8_t code[32];
+    if (encode_patch(addr, target, orig, orig_len, code)) return -1;
     return mem_write(c, addr, code, (size_t)orig_len);
 }
 
@@ -211,6 +234,45 @@ static uintptr_t tramp_alloc(ludp_ctx *c, uintptr_t addr, size_t need)
     return branch_reachable(addr, t) ? t : 0;
 }
 
+/* Validate ownership before changing an existing entry. A freshly reloaded
+ * mapping can have the same inode, offset and address, but lacks our branch. */
+static int probe_site_owned(ludp_ctx *c, probe_t *p)
+{
+    if (p->site_lost) return 0;
+    probe_mapping now;
+    int found = mapping_at(c, p->addr, 1, &now, NULL);
+    if (found < 0) return -1;
+    if (found && now.dev_major == p->mapping.dev_major &&
+        now.dev_minor == p->mapping.dev_minor && now.inode == p->mapping.inode &&
+        now.offset == p->mapping.offset) {
+        int chain[LUDP_MAX_CHAIN];
+        int n = collect_chain(c, p->addr, chain, LUDP_MAX_CHAIN);
+        if (n < 0) return -1;
+        uintptr_t target = n ? c->probes[chain[0]].tramp : 0;
+        uint8_t expected[32], actual[32];
+        if (encode_patch(p->addr, target, p->orig, p->orig_len, expected) ||
+            mem_read(c, p->addr, actual, (size_t)p->orig_len))
+            return -1;
+        if (!memcmp(actual, expected, (size_t)p->orig_len)) return 1;
+
+        /* If rollback was incomplete, an altered entry may still be ours.
+         * Keep the tracee stopped when the actual bytes are ambiguous. */
+        if (memcmp(actual, p->orig, (size_t)p->orig_len)) {
+            for (int i = 0; i < c->nprobes; ++i) {
+                if (c->probes[i].used && c->probes[i].addr == p->addr &&
+                    c->probes[i].needs_rebuild) {
+                    errno = EIO;
+                    return -1;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < c->nprobes; ++i)
+        if (c->probes[i].used && c->probes[i].addr == p->addr)
+            c->probes[i].site_lost = true;
+    return 0;
+}
+
 /* Re-link the chain at addr: each enabled probe gets the right reloc bytes and
  * return target, and the probe site is patched to the newest enabled probe. */
 int rebuild_addr(ludp_ctx *c, uintptr_t addr)
@@ -271,7 +333,7 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
                        const ludp_filter *filter,
                        const ludp_call_action *call, u64 *id_out)
 {
-    if (!c || !c->attached || !sym || !*sym || !addr ||
+    if (!c || !c->attached || !sym || !*sym ||
         (flags != LUDP_PROBE_ENTRY &&
          flags != (LUDP_PROBE_ENTRY | LUDP_PROBE_RETURN))) {
         errno = EINVAL; return -1;
@@ -294,6 +356,13 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
     }
     bool was_stopped = c->stopped;
     if (quiesce(c) != 0) { fprintf(stderr, "[probe] quiesce fail\n"); return -1; }
+    /* Symbol lookup and entry installation must observe the same mappings. */
+    if (!addr && elf_resolve(c->pid, lib, sym, &addr, NULL, 0)) {
+        int error = errno;
+        if (!was_stopped) resume(c);
+        errno = error;
+        return -1;
+    }
     /* /proc/<pid>/maps may change between the public API call and the safe
      * point.  Revalidate while every target thread is stopped before copying
      * the callback pointer into executable trampoline data. */
@@ -316,11 +385,14 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         addr += 4;
 #endif
     int existing = head_of(c, addr);
-    if (existing >= 0 && probe_code_idle(c, NULL)) {
-        int err = errno;
-        if (!was_stopped) resume(c);
-        errno = err;
-        return -1;
+    if (existing >= 0) {
+        int owned = probe_site_owned(c, &c->probes[existing]);
+        if (owned <= 0 || probe_code_idle(c, NULL)) {
+            int error = owned == 0 ? ESTALE : errno;
+            if (!was_stopped) resume(c);
+            errno = error;
+            return -1;
+        }
     }
     if (existing >= 0 && ((flags | c->probes[existing].flags) & LUDP_PROBE_RETURN)) {
         errno = ENOTSUP; if (!was_stopped) resume(c);
@@ -350,6 +422,7 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
         /* chained probe: share the original instruction bytes */
         memcpy(p->orig, c->probes[h].orig, sizeof p->orig);
         p->orig_len = c->probes[h].orig_len;
+        p->mapping = c->probes[h].mapping;
         p->chain_next = h;
         /* Link only after all preparation succeeds. */
     } else {
@@ -392,6 +465,14 @@ int probe_add_internal(ludp_ctx *c, const char *sym, const char *lib,
 #endif
         p->orig_len = total;
         memcpy(p->orig, bytes, (size_t)total);
+        bool executable = false;
+        int found = mapping_at(c, addr, (size_t)total, &p->mapping, &executable);
+        if (found <= 0 || !executable) {
+            int error = found < 0 ? errno : EACCES;
+            if (!was_stopped) resume(c);
+            errno = error;
+            return -1;
+        }
     }
 
     const tramp_layout_t *tl = tramp_layout();
@@ -523,7 +604,13 @@ int probe_remove_internal(ludp_ctx *c, u64 id)
         slot = malloc(sizeof *slot);
         if (!slot) rc = -1;
     }
-    if (!rc) rc = switch_stopped(c, p, false);
+    if (!rc) {
+        int owned = probe_site_owned(c, p);
+        if (owned < 0)
+            rc = -1;
+        else if (owned)
+            rc = switch_stopped(c, p, false);
+    }
     if (!rc && last) {
         p->retiring = true;
         rc = release_idle_storage(c, false);
@@ -542,7 +629,9 @@ int probe_remove_internal(ludp_ctx *c, u64 id)
     } else {
         free(slot);
     }
-    if (running && !p->needs_rebuild && resume(c)) return -1;
+    int error = errno;
+    if (running && (!p->used || !p->needs_rebuild) && resume(c)) return -1;
+    if (rc) errno = error;
     return rc;
 }
 
@@ -552,16 +641,22 @@ int probe_set_enabled(ludp_ctx *c, u64 id, bool en)
     if (i < 0) { errno = ENOENT; return -1; }
     probe_t *p = &c->probes[i];
     if (c->closing || p->retiring) { errno = EBUSY; return -1; }
-    if (p->enabled == en && !p->needs_rebuild) return 0;
     bool running = !c->stopped;
     if (quiesce(c)) return -1;
-    int rc = probe_code_idle(c, NULL);
-    if (!rc) rc = switch_stopped(c, p, en);
-    if (!rc) {
-        p->generation++;
-        if (!p->generation) p->generation = 1;
+    int owned = probe_site_owned(c, p);
+    int rc = -1;
+    if (owned == 0) errno = ESTALE;
+    if (owned > 0) {
+        bool changed = p->enabled != en || p->needs_rebuild;
+        rc = changed ? probe_code_idle(c, NULL) : 0;
+        if (!rc && changed) {
+            rc = switch_stopped(c, p, en);
+            if (!rc && ++p->generation == 0) p->generation = 1;
+        }
     }
+    int error = errno;
     if (running && !p->needs_rebuild && resume(c)) return -1;
+    if (rc) errno = error;
     return rc;
 }
 
@@ -595,9 +690,6 @@ int probe_update_internal(ludp_ctx *c, u64 id,
     bool unchanged = p->flags == next.flags && p->enabled == next.enabled &&
                      memcmp(&p->filter, &next.filter, sizeof p->filter) == 0 &&
                      memcmp(&p->call, &next.call, sizeof p->call) == 0;
-    if (unchanged && !p->needs_rebuild)
-        return 0;
-
     bool running = !c->stopped;
     if (quiesce(c))
         return -1;
@@ -606,6 +698,15 @@ int probe_update_internal(ludp_ctx *c, u64 id,
     int saved_errno = 0;
     const tramp_layout_t *tl = tramp_layout();
     uint8_t *backup = NULL;
+    int owned = probe_site_owned(c, p);
+    if (owned <= 0) {
+        saved_errno = owned == 0 ? ESTALE : errno;
+        goto finish;
+    }
+    if (unchanged && !p->needs_rebuild) {
+        rc = 0;
+        goto finish;
+    }
     if (next.call.function && call_action_normalize(c, &next.call)) {
         saved_errno = errno;
         goto finish;

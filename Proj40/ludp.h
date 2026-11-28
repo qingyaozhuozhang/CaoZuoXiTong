@@ -107,6 +107,8 @@ typedef struct {
 ludp_ctx *ludp_attach(pid_t pid);
 /* 在应用安全点恢复入口、释放本会话的映射并分离。成功返回 0 并销毁 ctx。
  * 有在途探针时返回 -1/EBUSY；待调用返回后重试。其他清理错误也保留 ctx。 */
+/* After an exec stop, releases the replacement image and discards old probes.
+ * Attach again to create a new session for that image. */
 int ludp_detach(ludp_ctx *ctx);
 
 /* ELF 符号解析；lib 为 NULL/空串时表示主程序。 */
@@ -142,6 +144,7 @@ int ludp_probe_add_addr_call_ex(ludp_ctx *ctx, const char *sym,
 u64 ludp_return_missed(ludp_ctx *ctx);
 
 /* F4/F5：在应用安全点移除或切换探针。重复 enable/disable 幂等。 */
+/* An unloaded or replaced entry is retired without restoring its old bytes. */
 int ludp_probe_remove(ludp_ctx *ctx, u64 id);
 int ludp_probe_enable(ludp_ctx *ctx, u64 id);
 int ludp_probe_disable(ludp_ctx *ctx, u64 id);
@@ -177,6 +180,7 @@ int ludp_resume(ludp_ctx *ctx);
 int ludp_thread_count(ludp_ctx *ctx);
 /* 在运行期处理 clone、退出及信号的 ptrace 停止；应周期调用。
  * 返回正数：处理的事件数；0：暂无；-1：追踪目标已退出。 */
+/* ESTALE means exec replaced the image. Call ludp_detach to release it. */
 int ludp_poll(ludp_ctx *ctx);
 
 #ifdef __cplusplus
